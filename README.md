@@ -3,6 +3,11 @@
 This is a Dockerfile to build the WebRTC PeerConnection for Android
 using the new GN based build system.
 
+**NOTE: We do not provide any support related to building special versions, or
+related to issues with your Docker installation, or with regard to bugs in the
+WebRTC codebase itself. We also do not provide any support on how to integrate
+the resulting build into your application.**
+
 ## Usage
 
 First, build the base image:
