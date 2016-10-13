@@ -13,7 +13,7 @@ RUN apt-get install -y --no-install-recommends \
     ca-certificates \
     python \
     lbzip2 \
-    pkg-config \
+    pkg-config
 
 # Install android compile dependencies
 RUN apt-get install -y --no-install-recommends \
