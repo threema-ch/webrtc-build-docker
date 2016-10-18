@@ -36,6 +36,16 @@ You'll only have to update the base image from time to time, maybe every few
 weeks to months. It's a big "upfront cost" but it will reduce the duration of
 the actual build.
 
+## Custom patches
+
+You can also provide custom patches. Put a `.patch` file inside the
+`build/patches/` directory, then it should be applied automatically.
+
+The patch should be created using `git diff` inside the /webrtc/src directory
+(checkout of the https://chromium.googlesource.com/external/webrtc.git repo):
+
+    $ git diff > my-changes.patch
+
 ## License
 
     The MIT License (MIT)
