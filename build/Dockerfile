@@ -10,8 +10,8 @@ RUN git fetch && git checkout ac9f876bc06b8152ecc3a328147cdab19136361b && gclien
 
 # Apply patches
 RUN mkdir /webrtc/src/patches
-COPY patches/*.patch /webrtc/src/patches
-RUN for p in patches/*.patch; do git apply $p; done
+COPY ["patches/*.patch", "patches/.gitdir", "patches/"]
+RUN /bin/bash -c 'shopt -s nullglob && for p in patches/*.patch; do echo "Applying $p..."; git apply $p; done'
 
 # Generate Ninja project files
 RUN gn gen out/arm --args='is_debug=false target_os="android" target_cpu="arm" symbol_level=1'
