@@ -48,6 +48,8 @@ The patch should be created using `git diff` inside the /webrtc/src directory
 
 ## Troubleshooting
 
+### Docker: «No space left on device»
+
 If you use Docker with the `devicemapper` storage driver, it's possible that
 you get "no space left on device" errors even though there's still disk space
 left. This has to do with the way the storage is managed by Docker.
