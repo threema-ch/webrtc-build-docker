@@ -24,6 +24,7 @@ Then, start the actual build process based on the previously downloaded data:
 This will take probably around 0.5-1 hour. Once the script finished, you'll get
 the following output in the `out/` directory:
 
+ - `base_java.jar`
  - `libjingle_peerconnection_java.jar`
  - `arm/libjingle_peerconnection_so.so`
  - `x86/libjingle_peerconnection_so.so`
