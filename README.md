@@ -38,8 +38,8 @@ the actual build.
 
 ## Custom patches
 
-You can also provide custom patches. Put a `.patch` file inside the
-`build/patches/` directory, then it should be applied automatically.
+You can also apply custom patches during the build process. Put a `.patch` file
+inside the `build/patches/` directory, then it should be applied automatically.
 
 The patch should be created using `git diff` inside the /webrtc/src directory
 (checkout of the https://chromium.googlesource.com/external/webrtc.git repo):
