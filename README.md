@@ -14,7 +14,7 @@ First, build the base image:
 
     ./build-base.sh
 
-This will download lots and lots of data from the Chromium project. On my
+This will download lots and lots of data from the Chromium project. On our test
 system, it took about 1-1.5 hours with a resulting image being 47 GiB.
 
 Then, start the actual build process based on the previously downloaded data:
