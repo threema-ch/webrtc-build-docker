@@ -5,8 +5,7 @@ ENV GYP_DEFINES="OS=android"
 
 # Update code
 WORKDIR /webrtc/src
-#RUN git checkout master && git pull && gclient sync
-RUN git fetch && git checkout ac9f876bc06b8152ecc3a328147cdab19136361b && gclient sync
+RUN git checkout master && git pull && gclient sync
 
 # Apply patches
 RUN mkdir /webrtc/src/patches

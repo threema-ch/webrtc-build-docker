@@ -1,0 +1,22 @@
+Fix for https://bugs.chromium.org/p/webrtc/issues/detail?id=6517
+
+diff --git a/webrtc/modules/audio_coding/neteq/dtmf_tone_generator.cc b/webrtc/modules
+index 8b4b9d3..dbf2973 100644
+--- a/webrtc/modules/audio_coding/neteq/dtmf_tone_generator.cc
++++ b/webrtc/modules/audio_coding/neteq/dtmf_tone_generator.cc
+@@ -134,7 +134,6 @@ int DtmfToneGenerator::Init(int fs, int event, int attenuation) {
+   }
+ 
+   // Look up oscillator coefficient for low and high frequencies.
+-  RTC_DCHECK_LE(0u, fs_index);
+   RTC_DCHECK_GT(arraysize(kCoeff1), fs_index);
+   RTC_DCHECK_GT(arraysize(kCoeff2), fs_index);
+   RTC_DCHECK_LE(0, event);
+@@ -149,7 +148,6 @@ int DtmfToneGenerator::Init(int fs, int event, int attenuation) {
+   amplitude_ = kAmplitude[attenuation];
+ 
+   // Initialize sample history.
+-  RTC_DCHECK_LE(0u, fs_index);
+   RTC_DCHECK_GT(arraysize(kInitValue1), fs_index);
+   RTC_DCHECK_GT(arraysize(kInitValue2), fs_index);
+   RTC_DCHECK_LE(0, event);
