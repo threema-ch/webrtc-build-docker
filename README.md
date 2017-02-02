@@ -26,6 +26,7 @@ the following output in the `out/` directory:
 
  - `base_java.jar`
  - `libjingle_peerconnection_java.jar`
+ - `audio_device_java.jar`
  - `arm/libjingle_peerconnection_so.so`
  - `x86/libjingle_peerconnection_so.so`
 
