@@ -3,6 +3,12 @@ FROM threema/webrtc-build-base:latest
 # Export env variables
 ENV GYP_DEFINES="OS=android"
 
+# Ugly workarounds for "You have unstashed changes" problem
+RUN cd /webrtc/src/third_party \
+        && git config user.email "docker@example.com" \
+        && git config user.name "docker" \
+        && git commit WebKit/Source/web/tests/data/mhtml/simple_test.mht -m 'ugly hack'
+
 # Update code
 WORKDIR /webrtc/src
 RUN git checkout master && git pull && gclient sync
