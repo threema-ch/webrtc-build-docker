@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-docker build -t threema/webrtc-build:latest build/
+docker build --no-cache -t threema/webrtc-build:latest build/
 CONTAINER=$(docker create threema/webrtc-build:latest)
 mkdir -p out/arm out/x86
 

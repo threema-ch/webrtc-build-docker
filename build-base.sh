@@ -1,3 +1,3 @@
 #!/bin/bash
 set -e
-docker build --pull -t threema/webrtc-build-base:latest base/
+docker build --pull --no-cache -t threema/webrtc-build-base:latest base/
