@@ -25,13 +25,35 @@ This will take probably around 0.5-1 hour. Once the script finished, you'll get
 the following output in the `out/` directory:
 
  - `base_java.jar`
+ - `base_java.interface.jar`
  - `libjingle_peerconnection_java.jar`
+ - `libjingle_peerconnection_java.interface.jar`
  - `audio_device_java.jar`
+ - `audio_device_java.interface.jar`
+ - `libwebrtc.jar`
  - `arm/libjingle_peerconnection_so.so`
  - `x86/libjingle_peerconnection_so.so`
 
 If you want a non-release build, or if you want to build for other platforms,
 feel free to adjust the Dockerfiles.
+
+To build a certain commit version, adjust the `build/Dockerfile` like this:
+
+```diff
+diff --git a/build/Dockerfile b/build/Dockerfile
+index ed471e9..9198581 100644
+--- a/build/Dockerfile
++++ b/build/Dockerfile
+@@ -11,7 +11,7 @@ RUN cd /webrtc/src/third_party \
+ 
+ # Update code
+ WORKDIR /webrtc/src
+-RUN git checkout master && git pull && gclient sync
++RUN git checkout master && git pull && git checkout eeab9ccb2417cab18ae1681c6644c25fa4eadcd3 && gclient sync
+ 
+ # Apply patches
+ RUN mkdir /webrtc/src/patches
+```
 
 You'll only have to update the base image from time to time, maybe every few
 weeks to months. It's a big "upfront cost" but it will reduce the duration of
