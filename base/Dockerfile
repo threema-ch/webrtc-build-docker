@@ -46,11 +46,5 @@ ENV PATH /opt/depot_tools:$PATH
 RUN mkdir webrtc && cd webrtc && fetch --nohooks webrtc_android
 WORKDIR /webrtc
 
-# Ugly workarounds for "You have unstashed changes" problem
-RUN cd src/third_party \
-        && git config user.email "docker@example.com" \
-        && git config user.name "docker" \
-        && git commit WebKit/Source/web/tests/data/mhtml/simple_test.mht -m 'ugly hack'
-
 # Sync
 RUN yes | gclient sync
