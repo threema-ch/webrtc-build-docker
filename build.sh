@@ -4,6 +4,7 @@ docker build --no-cache -t threema/webrtc-build:latest build/
 CONTAINER=$(docker create threema/webrtc-build:latest)
 mkdir -p out/arm out/x86
 
+docker cp $CONTAINER:/webrtc/revision.txt out/
 docker cp $CONTAINER:/webrtc/src/out/arm/libjingle_peerconnection_so.so out/arm/
 docker cp $CONTAINER:/webrtc/src/out/x86/libjingle_peerconnection_so.so out/x86/
 docker cp $CONTAINER:/webrtc/src/out/arm/lib.java/rtc_base/base_java.jar out/

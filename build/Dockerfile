@@ -7,6 +7,9 @@ ENV GYP_DEFINES="OS=android"
 WORKDIR /webrtc/src
 RUN git checkout master && git pull && gclient sync
 
+# Log revision
+RUN git log --pretty=fuller HEAD...HEAD^ > /webrtc/revision.txt
+
 # Apply patches
 RUN mkdir /webrtc/src/patches
 COPY ["patches/*.patch", "patches/.gitdir", "patches/"]
