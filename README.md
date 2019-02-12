@@ -33,6 +33,8 @@ the following output in the `out/` directory:
  - `libwebrtc.jar`
  - `arm/libjingle_peerconnection_so.so`
  - `x86/libjingle_peerconnection_so.so`
+ - `arm64/libjingle_peerconnection_so.so`
+ - `x64/libjingle_peerconnection_so.so`
  - `revision.txt`
 
 If you want a non-release build, or if you want to build for other platforms,
@@ -50,7 +52,7 @@ index ed471e9..9198581 100644
  # Update code
  WORKDIR /webrtc/src
 -RUN git checkout master && git pull && gclient sync
-+RUN git checkout master && git pull && git checkout eeab9ccb2417cab18ae1681c6644c25fa4eadcd3 && gclient sync
++RUN git checkout master && git pull && git checkout branch-heads/72 && gclient sync
  
  # Apply patches
  RUN mkdir /webrtc/src/patches
@@ -87,7 +89,7 @@ switch to a file system based storage driver like `overlay2`.
 ## License
 
     The MIT License (MIT)
-    Copyright (c) 2016 Threema GmbH
+    Copyright (c) 2016-2019 Threema GmbH
 
     Permission is hereby granted, free of charge, to any person
     obtaining a copy of this software and associated documentation files
