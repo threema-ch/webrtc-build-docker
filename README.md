@@ -33,6 +33,7 @@ the following output in the `out/` directory:
  - `libwebrtc.jar`
  - `arm/libjingle_peerconnection_so.so`
  - `x86/libjingle_peerconnection_so.so`
+ - `revision.txt`
 
 If you want a non-release build, or if you want to build for other platforms,
 feel free to adjust the Dockerfiles.
