@@ -1,0 +1,33 @@
+diff --git a/media/sctp/sctp_transport.cc b/media/sctp/sctp_transport.cc
+index 8bcec41a28..ea6f0e6350 100644
+--- a/media/sctp/sctp_transport.cc
++++ b/media/sctp/sctp_transport.cc
+@@ -207,9 +207,28 @@ class SctpTransport::UsrSctpWrapper {
+     // See: http://svnweb.freebsd.org/base?view=revision&revision=229805
+     // usrsctp_sysctl_set_sctp_blackhole(2);
+ 
++    // Do not send ABORTs in response to INITs (1).
++    // Do not send ABORTs for received Out of the Blue packets (2).
++    usrsctp_sysctl_set_sctp_blackhole(2);
++
+     // Set the number of default outgoing streams. This is the number we'll
+     // send in the SCTP INIT message.
+     usrsctp_sysctl_set_sctp_nr_outgoing_streams_default(kMaxSctpStreams);
++
++    // Disable the Address Reconfiguration extension
++    usrsctp_sysctl_set_sctp_asconf_enable(0);
++
++    // Disable the Authentication extension
++    usrsctp_sysctl_set_sctp_auth_enable(0);
++
++    // Disable the NR-SACK extension (not standardised)
++    usrsctp_sysctl_set_sctp_nrsack_enable(0);
++
++    // Disable the Packet Drop Report extension (not standardised)
++    usrsctp_sysctl_set_sctp_pktdrop_enable(0);
++
++    // Enable the Partial Reliability extension
++    usrsctp_sysctl_set_sctp_pr_enable(1);
+   }
+ 
+   static void UninitializeUsrSctp() {

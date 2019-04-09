@@ -1,0 +1,32 @@
+diff --git a/rtc_base/openssl_stream_adapter.cc b/rtc_base/openssl_stream_adapter.cc
+index e80efd1ffd..1dae45b29f 100644
+--- a/rtc_base/openssl_stream_adapter.cc
++++ b/rtc_base/openssl_stream_adapter.cc
+@@ -67,10 +67,9 @@ struct SslCipherMapEntry {
+ 
+ // This isn't elegant, but it's better than an external reference
+ constexpr SrtpCipherMapEntry kSrtpCipherMap[] = {
+-    {"SRTP_AES128_CM_SHA1_80", SRTP_AES128_CM_SHA1_80},
+-    {"SRTP_AES128_CM_SHA1_32", SRTP_AES128_CM_SHA1_32},
++    {"SRTP_AEAD_AES_256_GCM", SRTP_AEAD_AES_256_GCM},
+     {"SRTP_AEAD_AES_128_GCM", SRTP_AEAD_AES_128_GCM},
+-    {"SRTP_AEAD_AES_256_GCM", SRTP_AEAD_AES_256_GCM}};
++    {"SRTP_AES128_CM_SHA1_80", SRTP_AES128_CM_SHA1_80}};
+ 
+ #ifndef OPENSSL_IS_BORINGSSL
+ // The "SSL_CIPHER_standard_name" function is only available in OpenSSL when
+@@ -1007,7 +1006,13 @@ SSL_CTX* OpenSSLStreamAdapter::SetupSSLContext() {
+   // with SHA256 or SHA384 as the handshake hash.
+   // This matches the list of SSLClientSocketOpenSSL in Chromium.
+   SSL_CTX_set_cipher_list(
+-      ctx, "DEFAULT:!NULL:!aNULL:!SHA256:!SHA384:!aECDH:!AESGCM+AES256:!aPSK");
++      ctx, "ECDHE-ECDSA-CHACHA20-POLY1305:"
++           "ECDHE-ECDSA-AES128-GCM-SHA256:"
++           "ECDHE-ECDSA-AES256-GCM-SHA384:"
++           "ECDHE-ECDSA-AES128-SHA256:"
++           "ECDHE-ECDSA-AES128-SHA:"
++           "ECDHE-ECDSA-AES256-SHA384:"
++           "ECDHE-ECDSA-AES256-SHA");
+ 
+   if (!srtp_ciphers_.empty()) {
+     if (SSL_CTX_set_tlsext_use_srtp(ctx, srtp_ciphers_.c_str())) {

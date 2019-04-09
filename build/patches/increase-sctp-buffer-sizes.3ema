@@ -1,0 +1,31 @@
+diff --git a/media/sctp/sctp_transport.cc b/media/sctp/sctp_transport.cc
+index 8bcec41a28..99179e7a4f 100644
+--- a/media/sctp/sctp_transport.cc
++++ b/media/sctp/sctp_transport.cc
+@@ -687,6 +687,26 @@ bool SctpTransport::OpenSctpSocket() {
+ bool SctpTransport::ConfigureSctpSocket() {
+   RTC_DCHECK_RUN_ON(network_thread_);
+   RTC_DCHECK(sock_);
++  // Set send and receive buffer size to 1 MiB to allow for adequate throughput
++  // in high-RTT scenarios.
++  int buffer_size = 1024 * 1024;
++  if (usrsctp_setsockopt(sock_, SOL_SOCKET, SO_RCVBUF,
++                         (const void *)&buffer_size,
++                         sizeof(buffer_size)) < 0) {
++    RTC_LOG_ERRNO(LS_ERROR) << debug_name_ << "->ConfigureSctpSocket(): "
++                            << "Failed to set SCTP receive buffer size.";
++    return false;
++  }
++  buffer_size = 1024 * 1024;
++  if (usrsctp_setsockopt(sock_, SOL_SOCKET, SO_SNDBUF,
++                         (const void *)&buffer_size,
++                         sizeof(buffer_size)) < 0) {
++    RTC_LOG_ERRNO(LS_ERROR) << debug_name_ << "->ConfigureSctpSocket(): "
++                            << "Failed to set SCTP send buffer size.";
++    return false;
++  }
++
++
+   // Make the socket non-blocking. Connect, close, shutdown etc will not block
+   // the thread waiting for the socket operation to complete.
+   if (usrsctp_set_non_blocking(sock_, 1) < 0) {
