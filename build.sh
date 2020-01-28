@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-docker build --no-cache -t threema/webrtc-build:latest build/
+docker build --no-cache --ulimit nofile=122880:122880 -t threema/webrtc-build:latest build/
 CONTAINER=$(docker create threema/webrtc-build:latest)
 TARGETS='arm arm64 x86 x64'
 
