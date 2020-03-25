@@ -52,11 +52,13 @@ index ed471e9..9198581 100644
  # Update code
  WORKDIR /webrtc/src
 -RUN git checkout master && git pull && gclient sync
-+RUN git checkout master && git pull && git checkout branch-heads/72 && gclient sync
++RUN git checkout master && git pull && git checkout branch-heads/3987 && gclient sync
  
  # Apply patches
  RUN mkdir /webrtc/src/patches
 ```
+
+(Note: You can find the correct branch version at https://chromiumdash.appspot.com/branches)
 
 You'll only have to update the base image from time to time, maybe every few
 weeks to months. It's a big "upfront cost" but it will reduce the duration of
