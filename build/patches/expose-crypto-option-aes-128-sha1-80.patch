@@ -1,0 +1,117 @@
+diff --git a/sdk/android/api/org/webrtc/CryptoOptions.java b/sdk/android/api/org/webrtc/CryptoOptions.java
+index 77b9552aad..f63cf0cffb 100644
+--- a/sdk/android/api/org/webrtc/CryptoOptions.java
++++ b/sdk/android/api/org/webrtc/CryptoOptions.java
+@@ -34,16 +34,26 @@ public final class CryptoOptions {
+      * other ciphers get preferred.
+      */
+     private final boolean enableAes128Sha1_32CryptoCipher;
++    /**
++     * If set to true, the crypto cipher SRTP_AES128_CM_SHA1_80 will be
++     * included in the list of supported ciphers during negotiation.
++     */
++    private final boolean enableAes128Sha1_80CryptoCipher;
+     /**
+      * If set to true, encrypted RTP header extensions as defined in RFC 6904
+      * will be negotiated. They will only be used if both peers support them.
+      */
+     private final boolean enableEncryptedRtpHeaderExtensions;
+ 
+-    private Srtp(boolean enableGcmCryptoSuites, boolean enableAes128Sha1_32CryptoCipher,
+-        boolean enableEncryptedRtpHeaderExtensions) {
++    private Srtp(
++      boolean enableGcmCryptoSuites,
++      boolean enableAes128Sha1_32CryptoCipher,
++      boolean enableAes128Sha1_80CryptoCipher,
++      boolean enableEncryptedRtpHeaderExtensions
++    ) {
+       this.enableGcmCryptoSuites = enableGcmCryptoSuites;
+       this.enableAes128Sha1_32CryptoCipher = enableAes128Sha1_32CryptoCipher;
++      this.enableAes128Sha1_80CryptoCipher = enableAes128Sha1_80CryptoCipher;
+       this.enableEncryptedRtpHeaderExtensions = enableEncryptedRtpHeaderExtensions;
+     }
+ 
+@@ -57,6 +67,11 @@ public final class CryptoOptions {
+       return enableAes128Sha1_32CryptoCipher;
+     }
+ 
++    @CalledByNative("Srtp")
++    public boolean getEnableAes128Sha1_80CryptoCipher() {
++      return enableAes128Sha1_80CryptoCipher;
++    }
++
+     @CalledByNative("Srtp")
+     public boolean getEnableEncryptedRtpHeaderExtensions() {
+       return enableEncryptedRtpHeaderExtensions;
+@@ -87,10 +102,19 @@ public final class CryptoOptions {
+   private final Srtp srtp;
+   private final SFrame sframe;
+ 
+-  private CryptoOptions(boolean enableGcmCryptoSuites, boolean enableAes128Sha1_32CryptoCipher,
+-      boolean enableEncryptedRtpHeaderExtensions, boolean requireFrameEncryption) {
++  private CryptoOptions(
++      boolean enableGcmCryptoSuites,
++      boolean enableAes128Sha1_32CryptoCipher,
++      boolean enableAes128Sha1_80CryptoCipher,
++      boolean enableEncryptedRtpHeaderExtensions,
++      boolean requireFrameEncryption
++    ) {
+     this.srtp = new Srtp(
+-        enableGcmCryptoSuites, enableAes128Sha1_32CryptoCipher, enableEncryptedRtpHeaderExtensions);
++      enableGcmCryptoSuites,
++      enableAes128Sha1_32CryptoCipher,
++      enableAes128Sha1_80CryptoCipher,
++      enableEncryptedRtpHeaderExtensions
++    );
+     this.sframe = new SFrame(requireFrameEncryption);
+   }
+ 
+@@ -111,6 +135,7 @@ public final class CryptoOptions {
+   public static class Builder {
+     private boolean enableGcmCryptoSuites;
+     private boolean enableAes128Sha1_32CryptoCipher;
++    private boolean enableAes128Sha1_80CryptoCipher;
+     private boolean enableEncryptedRtpHeaderExtensions;
+     private boolean requireFrameEncryption;
+ 
+@@ -126,6 +151,11 @@ public final class CryptoOptions {
+       return this;
+     }
+ 
++    public Builder setEnableAes128Sha1_80CryptoCipher(boolean enableAes128Sha1_80CryptoCipher) {
++      this.enableAes128Sha1_80CryptoCipher = enableAes128Sha1_80CryptoCipher;
++      return this;
++    }
++
+     public Builder setEnableEncryptedRtpHeaderExtensions(
+         boolean enableEncryptedRtpHeaderExtensions) {
+       this.enableEncryptedRtpHeaderExtensions = enableEncryptedRtpHeaderExtensions;
+@@ -138,8 +168,13 @@ public final class CryptoOptions {
+     }
+ 
+     public CryptoOptions createCryptoOptions() {
+-      return new CryptoOptions(enableGcmCryptoSuites, enableAes128Sha1_32CryptoCipher,
+-          enableEncryptedRtpHeaderExtensions, requireFrameEncryption);
++      return new CryptoOptions(
++        enableGcmCryptoSuites,
++        enableAes128Sha1_32CryptoCipher,
++        enableAes128Sha1_80CryptoCipher,
++        enableEncryptedRtpHeaderExtensions,
++        requireFrameEncryption
++      );
+     }
+   }
+ }
+diff --git a/sdk/android/src/jni/pc/crypto_options.cc b/sdk/android/src/jni/pc/crypto_options.cc
+index af5f195d98..30cb504f1b 100644
+--- a/sdk/android/src/jni/pc/crypto_options.cc
++++ b/sdk/android/src/jni/pc/crypto_options.cc
+@@ -32,6 +32,8 @@ absl::optional<CryptoOptions> JavaToNativeOptionalCryptoOptions(
+       Java_Srtp_getEnableGcmCryptoSuites(jni, j_srtp);
+   native_crypto_options.srtp.enable_aes128_sha1_32_crypto_cipher =
+       Java_Srtp_getEnableAes128Sha1_32CryptoCipher(jni, j_srtp);
++  native_crypto_options.srtp.enable_aes128_sha1_80_crypto_cipher =
++      Java_Srtp_getEnableAes128Sha1_80CryptoCipher(jni, j_srtp);
+   native_crypto_options.srtp.enable_encrypted_rtp_header_extensions =
+       Java_Srtp_getEnableEncryptedRtpHeaderExtensions(jni, j_srtp);
+   native_crypto_options.sframe.require_frame_encryption =
