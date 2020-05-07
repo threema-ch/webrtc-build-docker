@@ -1,0 +1,15 @@
+diff --git a/rtc_base/openssl_stream_adapter.cc b/rtc_base/openssl_stream_adapter.cc
+index 7f4b79a53a..930f4f3271 100644
+--- a/rtc_base/openssl_stream_adapter.cc
++++ b/rtc_base/openssl_stream_adapter.cc
+@@ -1032,7 +1032,9 @@ SSL_CTX* OpenSSLStreamAdapter::SetupSSLContext() {
+   // with SHA256 or SHA384 as the handshake hash.
+   // This matches the list of SSLClientSocketOpenSSL in Chromium.
+   SSL_CTX_set_cipher_list(
+-      ctx, "DEFAULT:!NULL:!aNULL:!SHA256:!SHA384:!aECDH:!AESGCM+AES256:!aPSK");
++      ctx, "ECDHE-ECDSA-CHACHA20-POLY1305:"
++           "ECDHE-ECDSA-AES256-GCM-SHA384:"
++           "ECDHE-ECDSA-AES128-GCM-SHA256:");
+ 
+   if (!srtp_ciphers_.empty()) {
+     if (SSL_CTX_set_tlsext_use_srtp(ctx, srtp_ciphers_.c_str())) {
