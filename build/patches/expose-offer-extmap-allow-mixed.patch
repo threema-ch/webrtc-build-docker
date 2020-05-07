@@ -1,0 +1,54 @@
+diff --git a/sdk/android/api/org/webrtc/PeerConnection.java b/sdk/android/api/org/webrtc/PeerConnection.java
+index bf0a2e9441..aa44dbae05 100644
+--- a/sdk/android/api/org/webrtc/PeerConnection.java
++++ b/sdk/android/api/org/webrtc/PeerConnection.java
+@@ -555,6 +555,14 @@ public class PeerConnection {
+      */
+     @Nullable public CryptoOptions cryptoOptions;
+ 
++    /**
++     * Configure if we should include the SDP attribute extmap-allow-mixed in
++     * our offer. Although we currently do support this, it's not included in
++     * our offer by default due to a previous bug that caused the SDP parser to
++     * abort parsing if this attribute was present. This is fixed in Chrome 71.
++     */
++     public boolean offerExtmapAllowMixed;
++
+     /**
+      * An optional string that if set will be attached to the
+      * TURN_ALLOCATE_REQUEST which can be used to correlate client
+@@ -605,6 +613,9 @@ public class PeerConnection {
+       useMediaTransport = false;
+       useMediaTransportForDataChannels = false;
+       cryptoOptions = null;
++      // TODO(webrtc:9985): Change default to true once sufficient time has
++      // passed.
++      offerExtmapAllowMixed = false;
+       turnLoggingId = null;
+       allowCodecSwitching = null;
+     }
+@@ -832,6 +843,11 @@ public class PeerConnection {
+       return cryptoOptions;
+     }
+ 
++    @CalledByNative("RTCConfiguration")
++    boolean getOfferExtmapAllowMixed() {
++      return offerExtmapAllowMixed;
++    }
++
+     @Nullable
+     @CalledByNative("RTCConfiguration")
+     String getTurnLoggingId() {
+diff --git a/sdk/android/src/jni/pc/peer_connection.cc b/sdk/android/src/jni/pc/peer_connection.cc
+index 0ae39fbf66..02ce2d8a5c 100644
+--- a/sdk/android/src/jni/pc/peer_connection.cc
++++ b/sdk/android/src/jni/pc/peer_connection.cc
+@@ -271,6 +271,8 @@ void JavaToNativeRTCConfiguration(
+                                                                 j_rtc_config);
+   rtc_config->crypto_options =
+       JavaToNativeOptionalCryptoOptions(jni, j_crypto_options);
++  rtc_config->offer_extmap_allow_mixed =
++      Java_RTCConfiguration_getOfferExtmapAllowMixed(jni, j_rtc_config);
+ 
+   rtc_config->allow_codec_switching = JavaToNativeOptionalBool(
+       jni, Java_RTCConfiguration_getAllowCodecSwitching(jni, j_rtc_config));
