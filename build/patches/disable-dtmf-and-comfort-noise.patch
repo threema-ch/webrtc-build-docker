@@ -1,0 +1,103 @@
+diff --git a/media/engine/webrtc_voice_engine.cc b/media/engine/webrtc_voice_engine.cc
+index 47bfa7d812..e5d6f6901a 100644
+--- a/media/engine/webrtc_voice_engine.cc
++++ b/media/engine/webrtc_voice_engine.cc
+@@ -661,40 +661,10 @@ std::vector<AudioCodec> WebRtcVoiceEngine::CollectCodecs(
+         codec.AddFeedbackParam(
+             FeedbackParam(kRtcpFbParamTransportCc, kParamValueEmpty));
+       }
+-
+-      if (spec.info.allow_comfort_noise) {
+-        // Generate a CN entry if the decoder allows it and we support the
+-        // clockrate.
+-        auto cn = generate_cn.find(spec.format.clockrate_hz);
+-        if (cn != generate_cn.end()) {
+-          cn->second = true;
+-        }
+-      }
+-
+-      // Generate a telephone-event entry if we support the clockrate.
+-      auto dtmf = generate_dtmf.find(spec.format.clockrate_hz);
+-      if (dtmf != generate_dtmf.end()) {
+-        dtmf->second = true;
+-      }
+-
+       out.push_back(codec);
+     }
+   }
+ 
+-  // Add CN codecs after "proper" audio codecs.
+-  for (const auto& cn : generate_cn) {
+-    if (cn.second) {
+-      map_format({kCnCodecName, cn.first, 1}, &out);
+-    }
+-  }
+-
+-  // Add telephone-event codecs last.
+-  for (const auto& dtmf : generate_dtmf) {
+-    if (dtmf.second) {
+-      map_format({kDtmfCodecName, dtmf.first, 1}, &out);
+-    }
+-  }
+-
+   return out;
+ }
+ 
+@@ -1618,20 +1588,6 @@ bool WebRtcVoiceMediaChannel::SetSendCodecs(
+     }
+   }
+ 
+-  // Find PT of telephone-event codec with lowest clockrate, as a fallback, in
+-  // case we don't have a DTMF codec with a rate matching the send codec's, or
+-  // if this function returns early.
+-  std::vector<AudioCodec> dtmf_codecs;
+-  for (const AudioCodec& codec : codecs) {
+-    if (IsCodec(codec, kDtmfCodecName)) {
+-      dtmf_codecs.push_back(codec);
+-      if (!dtmf_payload_type_ || codec.clockrate < dtmf_payload_freq_) {
+-        dtmf_payload_type_ = codec.id;
+-        dtmf_payload_freq_ = codec.clockrate;
+-      }
+-    }
+-  }
+-
+   // Scan through the list to figure out the codec to use for sending.
+   absl::optional<webrtc::AudioSendStream::Config::SendCodecSpec>
+       send_codec_spec;
+@@ -1667,36 +1623,6 @@ bool WebRtcVoiceMediaChannel::SetSendCodecs(
+   }
+ 
+   RTC_DCHECK(voice_codec_info);
+-  if (voice_codec_info->allow_comfort_noise) {
+-    // Loop through the codecs list again to find the CN codec.
+-    // TODO(solenberg): Break out into a separate function?
+-    for (const AudioCodec& cn_codec : codecs) {
+-      if (IsCodec(cn_codec, kCnCodecName) &&
+-          cn_codec.clockrate == send_codec_spec->format.clockrate_hz &&
+-          cn_codec.channels == voice_codec_info->num_channels) {
+-        if (cn_codec.channels != 1) {
+-          RTC_LOG(LS_WARNING)
+-              << "CN #channels " << cn_codec.channels << " not supported.";
+-        } else if (cn_codec.clockrate != 8000 && cn_codec.clockrate != 16000 &&
+-                   cn_codec.clockrate != 32000) {
+-          RTC_LOG(LS_WARNING)
+-              << "CN frequency " << cn_codec.clockrate << " not supported.";
+-        } else {
+-          send_codec_spec->cng_payload_type = cn_codec.id;
+-        }
+-        break;
+-      }
+-    }
+-
+-    // Find the telephone-event PT exactly matching the preferred send codec.
+-    for (const AudioCodec& dtmf_codec : dtmf_codecs) {
+-      if (dtmf_codec.clockrate == send_codec_spec->format.clockrate_hz) {
+-        dtmf_payload_type_ = dtmf_codec.id;
+-        dtmf_payload_freq_ = dtmf_codec.clockrate;
+-        break;
+-      }
+-    }
+-  }
+ 
+   if (send_codec_spec_ != send_codec_spec) {
+     send_codec_spec_ = std::move(send_codec_spec);
