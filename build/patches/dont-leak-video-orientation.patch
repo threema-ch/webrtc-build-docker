@@ -1,0 +1,16 @@
+diff --git a/modules/rtp_rtcp/source/rtp_sender_video.cc b/modules/rtp_rtcp/source/rtp_sender_video.cc
+index 4441c765f6..cc21f69423 100644
+--- a/modules/rtp_rtcp/source/rtp_sender_video.cc
++++ b/modules/rtp_rtcp/source/rtp_sender_video.cc
+@@ -290,10 +290,7 @@ void RTPSenderVideo::AddRtpHeaderExtensions(
+   // value sent.
+   // Set rotation when key frame or when changed (to follow standard).
+   // Or when different from 0 (to follow current receiver implementation).
+-  bool set_video_rotation =
+-      video_header.frame_type == VideoFrameType::kVideoFrameKey ||
+-      video_header.rotation != last_rotation_ ||
+-      video_header.rotation != kVideoRotation_0;
++  bool set_video_rotation = true;
+   if (last_packet && set_video_rotation)
+     packet->SetExtension<VideoOrientation>(video_header.rotation);
+ 
