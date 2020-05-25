@@ -1,0 +1,15 @@
+diff --git a/modules/audio_coding/codecs/opus/audio_encoder_opus.cc b/modules/audio_coding/codecs/opus/audio_encoder_opus.cc
+index ef32f4ce02..e6fe46c4b5 100644
+--- a/modules/audio_coding/codecs/opus/audio_encoder_opus.cc
++++ b/modules/audio_coding/codecs/opus/audio_encoder_opus.cc
+@@ -277,7 +277,9 @@ void AudioEncoderOpusImpl::AppendSupportedEncoders(
+   const SdpAudioFormat fmt = {"opus",
+                               kRtpTimestampRateHz,
+                               2,
+-                              {{"minptime", "10"}, {"useinbandfec", "1"}}};
++                              {{"minptime", "10"},
++                               {"useinbandfec", "1"},
++                               {"cbr", "1"}}};
+   const AudioCodecInfo info = QueryAudioEncoder(*SdpToConfig(fmt));
+   specs->push_back({fmt, info});
+ }
