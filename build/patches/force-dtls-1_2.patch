@@ -1,0 +1,42 @@
+diff --git a/rtc_base/openssl_stream_adapter.cc b/rtc_base/openssl_stream_adapter.cc
+index 7f4b79a53a..bd18593d84 100644
+--- a/rtc_base/openssl_stream_adapter.cc
++++ b/rtc_base/openssl_stream_adapter.cc
+@@ -968,33 +968,10 @@ SSL_CTX* OpenSSLStreamAdapter::SetupSSLContext() {
+     return nullptr;
+   }
+ 
+-  if (support_legacy_tls_protocols_flag_) {
+-    // TODO(https://bugs.webrtc.org/10261): Completely remove this branch in
+-    // M84.
+-    SSL_CTX_set_min_proto_version(
+-        ctx, ssl_mode_ == SSL_MODE_DTLS ? DTLS1_VERSION : TLS1_VERSION);
+-    switch (ssl_max_version_) {
+-      case SSL_PROTOCOL_TLS_10:
+-        SSL_CTX_set_max_proto_version(
+-            ctx, ssl_mode_ == SSL_MODE_DTLS ? DTLS1_VERSION : TLS1_VERSION);
+-        break;
+-      case SSL_PROTOCOL_TLS_11:
+-        SSL_CTX_set_max_proto_version(
+-            ctx, ssl_mode_ == SSL_MODE_DTLS ? DTLS1_VERSION : TLS1_1_VERSION);
+-        break;
+-      case SSL_PROTOCOL_TLS_12:
+-      default:
+-        SSL_CTX_set_max_proto_version(
+-            ctx, ssl_mode_ == SSL_MODE_DTLS ? DTLS1_2_VERSION : TLS1_2_VERSION);
+-        break;
+-    }
+-  } else {
+-    // TODO(https://bugs.webrtc.org/10261): Make this the default in M84.
+-    SSL_CTX_set_min_proto_version(
+-        ctx, ssl_mode_ == SSL_MODE_DTLS ? DTLS1_2_VERSION : TLS1_2_VERSION);
+-    SSL_CTX_set_max_proto_version(
+-        ctx, ssl_mode_ == SSL_MODE_DTLS ? DTLS1_2_VERSION : TLS1_2_VERSION);
+-  }
++  SSL_CTX_set_min_proto_version(
++      ctx, ssl_mode_ == SSL_MODE_DTLS ? DTLS1_2_VERSION : TLS1_2_VERSION);
++  SSL_CTX_set_max_proto_version(
++      ctx, ssl_mode_ == SSL_MODE_DTLS ? DTLS1_2_VERSION : TLS1_2_VERSION);
+ 
+ #ifdef OPENSSL_IS_BORINGSSL
+   // SSL_CTX_set_current_time_cb is only supported in BoringSSL.
