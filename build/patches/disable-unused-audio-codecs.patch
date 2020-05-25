@@ -1,0 +1,409 @@
+diff --git a/api/audio_codecs/L16/audio_decoder_L16.cc b/api/audio_codecs/L16/audio_decoder_L16.cc
+index 57c9e76889..f92aeeccc5 100644
+--- a/api/audio_codecs/L16/audio_decoder_L16.cc
++++ b/api/audio_codecs/L16/audio_decoder_L16.cc
+@@ -31,15 +31,13 @@ absl::optional<AudioDecoderL16::Config> AudioDecoderL16::SdpToConfig(
+ 
+ void AudioDecoderL16::AppendSupportedDecoders(
+     std::vector<AudioCodecSpec>* specs) {
+-  Pcm16BAppendSupportedCodecSpecs(specs);
++  // disabled
+ }
+ 
+ std::unique_ptr<AudioDecoder> AudioDecoderL16::MakeAudioDecoder(
+     const Config& config,
+     absl::optional<AudioCodecPairId> /*codec_pair_id*/) {
+-  return config.IsOk() ? std::make_unique<AudioDecoderPcm16B>(
+-                             config.sample_rate_hz, config.num_channels)
+-                       : nullptr;
++  return nullptr; // disabled
+ }
+ 
+ }  // namespace webrtc
+diff --git a/api/audio_codecs/L16/audio_encoder_L16.cc b/api/audio_codecs/L16/audio_encoder_L16.cc
+index 507c8d7d26..86ad1c312c 100644
+--- a/api/audio_codecs/L16/audio_encoder_L16.cc
++++ b/api/audio_codecs/L16/audio_encoder_L16.cc
+@@ -43,7 +43,7 @@ absl::optional<AudioEncoderL16::Config> AudioEncoderL16::SdpToConfig(
+ 
+ void AudioEncoderL16::AppendSupportedEncoders(
+     std::vector<AudioCodecSpec>* specs) {
+-  Pcm16BAppendSupportedCodecSpecs(specs);
++  // disabled
+ }
+ 
+ AudioCodecInfo AudioEncoderL16::QueryAudioEncoder(
+@@ -59,12 +59,7 @@ std::unique_ptr<AudioEncoder> AudioEncoderL16::MakeAudioEncoder(
+     int payload_type,
+     absl::optional<AudioCodecPairId> /*codec_pair_id*/) {
+   RTC_DCHECK(config.IsOk());
+-  AudioEncoderPcm16B::Config c;
+-  c.sample_rate_hz = config.sample_rate_hz;
+-  c.num_channels = config.num_channels;
+-  c.frame_size_ms = config.frame_size_ms;
+-  c.payload_type = payload_type;
+-  return std::make_unique<AudioEncoderPcm16B>(c);
++  return nullptr; // disabled
+ }
+ 
+ }  // namespace webrtc
+diff --git a/api/audio_codecs/builtin_audio_decoder_factory.cc b/api/audio_codecs/builtin_audio_decoder_factory.cc
+index 963cfe5cb9..db29a840a8 100644
+--- a/api/audio_codecs/builtin_audio_decoder_factory.cc
++++ b/api/audio_codecs/builtin_audio_decoder_factory.cc
+@@ -13,18 +13,9 @@
+ #include <memory>
+ #include <vector>
+ 
+-#include "api/audio_codecs/L16/audio_decoder_L16.h"
+ #include "api/audio_codecs/audio_decoder_factory_template.h"
+-#include "api/audio_codecs/g711/audio_decoder_g711.h"
+-#include "api/audio_codecs/g722/audio_decoder_g722.h"
+-#if WEBRTC_USE_BUILTIN_ILBC
+-#include "api/audio_codecs/ilbc/audio_decoder_ilbc.h"  // nogncheck
+-#endif
+-#include "api/audio_codecs/isac/audio_decoder_isac.h"
+-#if WEBRTC_USE_BUILTIN_OPUS
+ #include "api/audio_codecs/opus/audio_decoder_multi_channel_opus.h"
+-#include "api/audio_codecs/opus/audio_decoder_opus.h"  // nogncheck
+-#endif
++#include "api/audio_codecs/opus/audio_decoder_opus.h"
+ 
+ namespace webrtc {
+ 
+@@ -52,18 +43,7 @@ struct NotAdvertised {
+ 
+ rtc::scoped_refptr<AudioDecoderFactory> CreateBuiltinAudioDecoderFactory() {
+   return CreateAudioDecoderFactory<
+-
+-#if WEBRTC_USE_BUILTIN_OPUS
+-      AudioDecoderOpus, NotAdvertised<AudioDecoderMultiChannelOpus>,
+-#endif
+-
+-      AudioDecoderIsac, AudioDecoderG722,
+-
+-#if WEBRTC_USE_BUILTIN_ILBC
+-      AudioDecoderIlbc,
+-#endif
+-
+-      AudioDecoderG711, NotAdvertised<AudioDecoderL16>>();
++      AudioDecoderOpus, NotAdvertised<AudioDecoderMultiChannelOpus>>();
+ }
+ 
+ }  // namespace webrtc
+diff --git a/api/audio_codecs/builtin_audio_encoder_factory.cc b/api/audio_codecs/builtin_audio_encoder_factory.cc
+index 99fac09a57..b2b5ec82fb 100644
+--- a/api/audio_codecs/builtin_audio_encoder_factory.cc
++++ b/api/audio_codecs/builtin_audio_encoder_factory.cc
+@@ -13,18 +13,9 @@
+ #include <memory>
+ #include <vector>
+ 
+-#include "api/audio_codecs/L16/audio_encoder_L16.h"
+ #include "api/audio_codecs/audio_encoder_factory_template.h"
+-#include "api/audio_codecs/g711/audio_encoder_g711.h"
+-#include "api/audio_codecs/g722/audio_encoder_g722.h"
+-#if WEBRTC_USE_BUILTIN_ILBC
+-#include "api/audio_codecs/ilbc/audio_encoder_ilbc.h"  // nogncheck
+-#endif
+-#include "api/audio_codecs/isac/audio_encoder_isac.h"
+-#if WEBRTC_USE_BUILTIN_OPUS
+ #include "api/audio_codecs/opus/audio_encoder_multi_channel_opus.h"
+-#include "api/audio_codecs/opus/audio_encoder_opus.h"  // nogncheck
+-#endif
++#include "api/audio_codecs/opus/audio_encoder_opus.h"
+ 
+ namespace webrtc {
+ 
+@@ -56,18 +47,7 @@ struct NotAdvertised {
+ 
+ rtc::scoped_refptr<AudioEncoderFactory> CreateBuiltinAudioEncoderFactory() {
+   return CreateAudioEncoderFactory<
+-
+-#if WEBRTC_USE_BUILTIN_OPUS
+-      AudioEncoderOpus, NotAdvertised<AudioEncoderMultiChannelOpus>,
+-#endif
+-
+-      AudioEncoderIsac, AudioEncoderG722,
+-
+-#if WEBRTC_USE_BUILTIN_ILBC
+-      AudioEncoderIlbc,
+-#endif
+-
+-      AudioEncoderG711, NotAdvertised<AudioEncoderL16>>();
++      AudioEncoderOpus, NotAdvertised<AudioEncoderMultiChannelOpus>>();
+ }
+ 
+ }  // namespace webrtc
+diff --git a/api/audio_codecs/g711/audio_decoder_g711.cc b/api/audio_codecs/g711/audio_decoder_g711.cc
+index 57e3741bef..488cecd026 100644
+--- a/api/audio_codecs/g711/audio_decoder_g711.cc
++++ b/api/audio_codecs/g711/audio_decoder_g711.cc
+@@ -37,23 +37,14 @@ absl::optional<AudioDecoderG711::Config> AudioDecoderG711::SdpToConfig(
+ 
+ void AudioDecoderG711::AppendSupportedDecoders(
+     std::vector<AudioCodecSpec>* specs) {
+-  for (const char* type : {"PCMU", "PCMA"}) {
+-    specs->push_back({{type, 8000, 1}, {8000, 1, 64000}});
+-  }
++  // disabled
+ }
+ 
+ std::unique_ptr<AudioDecoder> AudioDecoderG711::MakeAudioDecoder(
+     const Config& config,
+     absl::optional<AudioCodecPairId> /*codec_pair_id*/) {
+   RTC_DCHECK(config.IsOk());
+-  switch (config.type) {
+-    case Config::Type::kPcmU:
+-      return std::make_unique<AudioDecoderPcmU>(config.num_channels);
+-    case Config::Type::kPcmA:
+-      return std::make_unique<AudioDecoderPcmA>(config.num_channels);
+-    default:
+-      return nullptr;
+-  }
++  return nullptr; // disabled
+ }
+ 
+ }  // namespace webrtc
+diff --git a/api/audio_codecs/g711/audio_encoder_g711.cc b/api/audio_codecs/g711/audio_encoder_g711.cc
+index ab95ad45d5..be97941fcd 100644
+--- a/api/audio_codecs/g711/audio_encoder_g711.cc
++++ b/api/audio_codecs/g711/audio_encoder_g711.cc
+@@ -47,9 +47,7 @@ absl::optional<AudioEncoderG711::Config> AudioEncoderG711::SdpToConfig(
+ 
+ void AudioEncoderG711::AppendSupportedEncoders(
+     std::vector<AudioCodecSpec>* specs) {
+-  for (const char* type : {"PCMU", "PCMA"}) {
+-    specs->push_back({{type, 8000, 1}, {8000, 1, 64000}});
+-  }
++  // disabled
+ }
+ 
+ AudioCodecInfo AudioEncoderG711::QueryAudioEncoder(const Config& config) {
+@@ -63,25 +61,7 @@ std::unique_ptr<AudioEncoder> AudioEncoderG711::MakeAudioEncoder(
+     int payload_type,
+     absl::optional<AudioCodecPairId> /*codec_pair_id*/) {
+   RTC_DCHECK(config.IsOk());
+-  switch (config.type) {
+-    case Config::Type::kPcmU: {
+-      AudioEncoderPcmU::Config impl_config;
+-      impl_config.num_channels = config.num_channels;
+-      impl_config.frame_size_ms = config.frame_size_ms;
+-      impl_config.payload_type = payload_type;
+-      return std::make_unique<AudioEncoderPcmU>(impl_config);
+-    }
+-    case Config::Type::kPcmA: {
+-      AudioEncoderPcmA::Config impl_config;
+-      impl_config.num_channels = config.num_channels;
+-      impl_config.frame_size_ms = config.frame_size_ms;
+-      impl_config.payload_type = payload_type;
+-      return std::make_unique<AudioEncoderPcmA>(impl_config);
+-    }
+-    default: {
+-      return nullptr;
+-    }
+-  }
++  return nullptr; // disabled
+ }
+ 
+ }  // namespace webrtc
+diff --git a/api/audio_codecs/g722/audio_decoder_g722.cc b/api/audio_codecs/g722/audio_decoder_g722.cc
+index 29b6d5da0a..6d3792df01 100644
+--- a/api/audio_codecs/g722/audio_decoder_g722.cc
++++ b/api/audio_codecs/g722/audio_decoder_g722.cc
+@@ -31,20 +31,13 @@ absl::optional<AudioDecoderG722::Config> AudioDecoderG722::SdpToConfig(
+ 
+ void AudioDecoderG722::AppendSupportedDecoders(
+     std::vector<AudioCodecSpec>* specs) {
+-  specs->push_back({{"G722", 8000, 1}, {16000, 1, 64000}});
++  // disabled
+ }
+ 
+ std::unique_ptr<AudioDecoder> AudioDecoderG722::MakeAudioDecoder(
+     Config config,
+     absl::optional<AudioCodecPairId> /*codec_pair_id*/) {
+-  switch (config.num_channels) {
+-    case 1:
+-      return std::make_unique<AudioDecoderG722Impl>();
+-    case 2:
+-      return std::make_unique<AudioDecoderG722StereoImpl>();
+-    default:
+-      return nullptr;
+-  }
++  return nullptr; // disabled
+ }
+ 
+ }  // namespace webrtc
+diff --git a/api/audio_codecs/g722/audio_encoder_g722.cc b/api/audio_codecs/g722/audio_encoder_g722.cc
+index 12c1746eb7..067a658bef 100644
+--- a/api/audio_codecs/g722/audio_encoder_g722.cc
++++ b/api/audio_codecs/g722/audio_encoder_g722.cc
+@@ -44,9 +44,7 @@ absl::optional<AudioEncoderG722Config> AudioEncoderG722::SdpToConfig(
+ 
+ void AudioEncoderG722::AppendSupportedEncoders(
+     std::vector<AudioCodecSpec>* specs) {
+-  const SdpAudioFormat fmt = {"G722", 8000, 1};
+-  const AudioCodecInfo info = QueryAudioEncoder(*SdpToConfig(fmt));
+-  specs->push_back({fmt, info});
++  // disabled
+ }
+ 
+ AudioCodecInfo AudioEncoderG722::QueryAudioEncoder(
+@@ -61,7 +59,7 @@ std::unique_ptr<AudioEncoder> AudioEncoderG722::MakeAudioEncoder(
+     int payload_type,
+     absl::optional<AudioCodecPairId> /*codec_pair_id*/) {
+   RTC_DCHECK(config.IsOk());
+-  return std::make_unique<AudioEncoderG722Impl>(config, payload_type);
++  return nullptr; // disabled
+ }
+ 
+ }  // namespace webrtc
+diff --git a/api/audio_codecs/ilbc/audio_decoder_ilbc.cc b/api/audio_codecs/ilbc/audio_decoder_ilbc.cc
+index d0aae9044e..1605f60881 100644
+--- a/api/audio_codecs/ilbc/audio_decoder_ilbc.cc
++++ b/api/audio_codecs/ilbc/audio_decoder_ilbc.cc
+@@ -28,13 +28,13 @@ absl::optional<AudioDecoderIlbc::Config> AudioDecoderIlbc::SdpToConfig(
+ 
+ void AudioDecoderIlbc::AppendSupportedDecoders(
+     std::vector<AudioCodecSpec>* specs) {
+-  specs->push_back({{"ILBC", 8000, 1}, {8000, 1, 13300}});
++  // disabled
+ }
+ 
+ std::unique_ptr<AudioDecoder> AudioDecoderIlbc::MakeAudioDecoder(
+     Config config,
+     absl::optional<AudioCodecPairId> /*codec_pair_id*/) {
+-  return std::make_unique<AudioDecoderIlbcImpl>();
++  return nullptr; // disabled
+ }
+ 
+ }  // namespace webrtc
+diff --git a/api/audio_codecs/ilbc/audio_encoder_ilbc.cc b/api/audio_codecs/ilbc/audio_encoder_ilbc.cc
+index bd653b7979..6ff94a246c 100644
+--- a/api/audio_codecs/ilbc/audio_encoder_ilbc.cc
++++ b/api/audio_codecs/ilbc/audio_encoder_ilbc.cc
+@@ -59,9 +59,7 @@ absl::optional<AudioEncoderIlbcConfig> AudioEncoderIlbc::SdpToConfig(
+ 
+ void AudioEncoderIlbc::AppendSupportedEncoders(
+     std::vector<AudioCodecSpec>* specs) {
+-  const SdpAudioFormat fmt = {"ILBC", 8000, 1};
+-  const AudioCodecInfo info = QueryAudioEncoder(*SdpToConfig(fmt));
+-  specs->push_back({fmt, info});
++  // disabled
+ }
+ 
+ AudioCodecInfo AudioEncoderIlbc::QueryAudioEncoder(
+@@ -75,7 +73,7 @@ std::unique_ptr<AudioEncoder> AudioEncoderIlbc::MakeAudioEncoder(
+     int payload_type,
+     absl::optional<AudioCodecPairId> /*codec_pair_id*/) {
+   RTC_DCHECK(config.IsOk());
+-  return std::make_unique<AudioEncoderIlbcImpl>(config, payload_type);
++  return nullptr; // disabled
+ }
+ 
+ }  // namespace webrtc
+diff --git a/api/audio_codecs/isac/audio_decoder_isac_fix.cc b/api/audio_codecs/isac/audio_decoder_isac_fix.cc
+index 21d0da37d1..acf51bf00b 100644
+--- a/api/audio_codecs/isac/audio_decoder_isac_fix.cc
++++ b/api/audio_codecs/isac/audio_decoder_isac_fix.cc
+@@ -27,15 +27,13 @@ absl::optional<AudioDecoderIsacFix::Config> AudioDecoderIsacFix::SdpToConfig(
+ 
+ void AudioDecoderIsacFix::AppendSupportedDecoders(
+     std::vector<AudioCodecSpec>* specs) {
+-  specs->push_back({{"ISAC", 16000, 1}, {16000, 1, 32000, 10000, 32000}});
++  // disabled
+ }
+ 
+ std::unique_ptr<AudioDecoder> AudioDecoderIsacFix::MakeAudioDecoder(
+     Config config,
+     absl::optional<AudioCodecPairId> /*codec_pair_id*/) {
+-  AudioDecoderIsacFixImpl::Config c;
+-  c.sample_rate_hz = 16000;
+-  return std::make_unique<AudioDecoderIsacFixImpl>(c);
++  return nullptr; // disabled
+ }
+ 
+ }  // namespace webrtc
+diff --git a/api/audio_codecs/isac/audio_decoder_isac_float.cc b/api/audio_codecs/isac/audio_decoder_isac_float.cc
+index 4efc2ea9a3..f67de87c5c 100644
+--- a/api/audio_codecs/isac/audio_decoder_isac_float.cc
++++ b/api/audio_codecs/isac/audio_decoder_isac_float.cc
+@@ -32,17 +32,14 @@ AudioDecoderIsacFloat::SdpToConfig(const SdpAudioFormat& format) {
+ 
+ void AudioDecoderIsacFloat::AppendSupportedDecoders(
+     std::vector<AudioCodecSpec>* specs) {
+-  specs->push_back({{"ISAC", 16000, 1}, {16000, 1, 32000, 10000, 32000}});
+-  specs->push_back({{"ISAC", 32000, 1}, {32000, 1, 56000, 10000, 56000}});
++  // disabled
+ }
+ 
+ std::unique_ptr<AudioDecoder> AudioDecoderIsacFloat::MakeAudioDecoder(
+     Config config,
+     absl::optional<AudioCodecPairId> /*codec_pair_id*/) {
+   RTC_DCHECK(config.IsOk());
+-  AudioDecoderIsacFloatImpl::Config c;
+-  c.sample_rate_hz = config.sample_rate_hz;
+-  return std::make_unique<AudioDecoderIsacFloatImpl>(c);
++  return nullptr; // disabled
+ }
+ 
+ }  // namespace webrtc
+diff --git a/api/audio_codecs/isac/audio_encoder_isac_fix.cc b/api/audio_codecs/isac/audio_encoder_isac_fix.cc
+index 7cf55b9163..01383d34bd 100644
+--- a/api/audio_codecs/isac/audio_encoder_isac_fix.cc
++++ b/api/audio_codecs/isac/audio_encoder_isac_fix.cc
+@@ -38,9 +38,7 @@ absl::optional<AudioEncoderIsacFix::Config> AudioEncoderIsacFix::SdpToConfig(
+ 
+ void AudioEncoderIsacFix::AppendSupportedEncoders(
+     std::vector<AudioCodecSpec>* specs) {
+-  const SdpAudioFormat fmt = {"ISAC", 16000, 1};
+-  const AudioCodecInfo info = QueryAudioEncoder(*SdpToConfig(fmt));
+-  specs->push_back({fmt, info});
++  // disabled
+ }
+ 
+ AudioCodecInfo AudioEncoderIsacFix::QueryAudioEncoder(
+@@ -54,11 +52,7 @@ std::unique_ptr<AudioEncoder> AudioEncoderIsacFix::MakeAudioEncoder(
+     int payload_type,
+     absl::optional<AudioCodecPairId> /*codec_pair_id*/) {
+   RTC_DCHECK(config.IsOk());
+-  AudioEncoderIsacFixImpl::Config c;
+-  c.frame_size_ms = config.frame_size_ms;
+-  c.bit_rate = config.bit_rate;
+-  c.payload_type = payload_type;
+-  return std::make_unique<AudioEncoderIsacFixImpl>(c);
++  return nullptr; // disabled
+ }
+ 
+ }  // namespace webrtc
+diff --git a/api/audio_codecs/isac/audio_encoder_isac_float.cc b/api/audio_codecs/isac/audio_encoder_isac_float.cc
+index 6f684c881b..f65c681776 100644
+--- a/api/audio_codecs/isac/audio_encoder_isac_float.cc
++++ b/api/audio_codecs/isac/audio_encoder_isac_float.cc
+@@ -45,11 +45,7 @@ AudioEncoderIsacFloat::SdpToConfig(const SdpAudioFormat& format) {
+ 
+ void AudioEncoderIsacFloat::AppendSupportedEncoders(
+     std::vector<AudioCodecSpec>* specs) {
+-  for (int sample_rate_hz : {16000, 32000}) {
+-    const SdpAudioFormat fmt = {"ISAC", sample_rate_hz, 1};
+-    const AudioCodecInfo info = QueryAudioEncoder(*SdpToConfig(fmt));
+-    specs->push_back({fmt, info});
+-  }
++  // disabled
+ }
+ 
+ AudioCodecInfo AudioEncoderIsacFloat::QueryAudioEncoder(
+@@ -66,12 +62,7 @@ std::unique_ptr<AudioEncoder> AudioEncoderIsacFloat::MakeAudioEncoder(
+     int payload_type,
+     absl::optional<AudioCodecPairId> /*codec_pair_id*/) {
+   RTC_DCHECK(config.IsOk());
+-  AudioEncoderIsacFloatImpl::Config c;
+-  c.payload_type = payload_type;
+-  c.sample_rate_hz = config.sample_rate_hz;
+-  c.frame_size_ms = config.frame_size_ms;
+-  c.bit_rate = config.bit_rate;
+-  return std::make_unique<AudioEncoderIsacFloatImpl>(c);
++  return nullptr; // disabled
+ }
+ 
+ }  // namespace webrtc
