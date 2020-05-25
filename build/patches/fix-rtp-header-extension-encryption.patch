@@ -1,5 +1,5 @@
 diff --git a/api/rtp_parameters.cc b/api/rtp_parameters.cc
-index a05b2bfa7b..04ea663778 100644
+index a05b2bfa7b..c08e84333f 100644
 --- a/api/rtp_parameters.cc
 +++ b/api/rtp_parameters.cc
 @@ -165,50 +165,111 @@ bool RtpExtension::IsEncryptionSupported(absl::string_view uri) {
@@ -53,7 +53,7 @@ index a05b2bfa7b..04ea663778 100644
 +          return &extension;
 +        }
 +        break;
-+      
++
 +      case kPreferEncryptedExtension:
 +        // We prefer an encrypted extension but we can fall back to an unencrypted
 +        // extension.
@@ -63,7 +63,7 @@ index a05b2bfa7b..04ea663778 100644
 +          fallback_extension = &extension;
 +        }
 +        break;
-+      
++
 +      default:
 +        RTC_NOTREACHED();
 +        return nullptr;
@@ -674,7 +674,7 @@ index a9c523d430..df27311bbd 100644
  
    answer->set_rtcp_mux(session_options.rtcp_mux_enabled && offer->rtcp_mux());
 diff --git a/pc/peer_connection.cc b/pc/peer_connection.cc
-index 05e7b95591..b5331c4a23 100644
+index 05e7b95591..b68f328f92 100644
 --- a/pc/peer_connection.cc
 +++ b/pc/peer_connection.cc
 @@ -3688,13 +3688,19 @@ static RTCError UpdateSimulcastLayerStatusInSender(
@@ -704,7 +704,7 @@ index 05e7b95591..b5331c4a23 100644
      // Check if the offer indicated simulcast but the answer rejected it.
      // This can happen when simulcast is not supported on the remote party.
 -    if (SimulcastIsRejected(old_local_content, *media_desc)) {
-+    
++
 +    if (SimulcastIsRejected(
 +        old_local_content,
 +        *media_desc,
