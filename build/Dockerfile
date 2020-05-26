@@ -14,7 +14,7 @@ RUN git log --pretty=fuller HEAD...HEAD^ > /webrtc/revision.txt
 # Apply patches
 RUN mkdir /webrtc/src/patches
 COPY ["patches/*.patch", "patches/.gitdir", "patches/"]
-RUN /bin/bash -c 'shopt -s nullglob && for p in patches/*.patch; do echo "Applying $p..."; git apply $p; done'
+RUN /bin/bash -c 'set -euo pipefail; shopt -s nullglob; for p in patches/*.patch; do echo "Applying $p..."; git apply $p; done'
 
 # Build for ARM
 RUN gn gen out/arm --args='is_debug=false target_os="android" target_cpu="arm" $WEBRTC_COMPILE_ARGS'
