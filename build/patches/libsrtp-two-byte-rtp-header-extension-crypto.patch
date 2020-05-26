@@ -1,7 +1,7 @@
-diff --git a//third_party/libsrtp/srtp/srtp.c b//third_party/libsrtp/srtp/srtp.c
+diff --git a/third_party/libsrtp/srtp/srtp.c b/third_party/libsrtp/srtp/srtp.c
 index 4462501..bfb596e 100644
---- a//third_party/libsrtp/srtp/srtp.c
-+++ b//third_party/libsrtp/srtp/srtp.c
+--- a/third_party/libsrtp/srtp/srtp.c
++++ b/third_party/libsrtp/srtp/srtp.c
 @@ -1422,7 +1422,7 @@ static srtp_err_status_t srtp_process_header_encryption(
                  xtn_hdr_data++;
              }
