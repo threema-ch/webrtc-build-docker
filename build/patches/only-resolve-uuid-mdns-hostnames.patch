@@ -1,0 +1,64 @@
+diff --git a/p2p/base/p2p_transport_channel.cc b/p2p/base/p2p_transport_channel.cc
+index 33325693b9..a3e11091fb 100644
+--- a/p2p/base/p2p_transport_channel.cc
++++ b/p2p/base/p2p_transport_channel.cc
+@@ -14,6 +14,7 @@
+ #include <memory>
+ #include <set>
+ #include <utility>
++#include <regex>
+ 
+ #include "absl/algorithm/container.h"
+ #include "absl/strings/match.h"
+@@ -1141,12 +1142,22 @@ void P2PTransportChannel::ResolveHostnameCandidate(const Candidate& candidate) {
+     return;
+   }
+ 
++  // Only allow resolving of mDNS hostnames with <UUID4>.local to avoid
++  // any leaks.
++  // See: https://github.com/rtcweb-wg/mdns-ice-candidates/issues/121
++  auto hostname = candidate.address().HostAsSensitiveURIString();
++  if (!std::regex_match(hostname, uuid_local_hostname_regex_)) {
++    RTC_LOG(LS_WARNING) << "Dropping non-UUID ICE candidate hostname "
++                        << hostname;
++    return;
++  }
++
+   rtc::AsyncResolverInterface* resolver = async_resolver_factory_->Create();
+   resolvers_.emplace_back(candidate, resolver);
+   resolver->SignalDone.connect(this, &P2PTransportChannel::OnCandidateResolved);
+   resolver->Start(candidate.address());
+   RTC_LOG(LS_INFO) << "Asynchronously resolving ICE candidate hostname "
+-                   << candidate.address().HostAsSensitiveURIString();
++                   << hostname;
+ }
+ 
+ void P2PTransportChannel::AddRemoteCandidate(const Candidate& candidate) {
+diff --git a/p2p/base/p2p_transport_channel.h b/p2p/base/p2p_transport_channel.h
+index 3d6c86f031..00c589dc3a 100644
+--- a/p2p/base/p2p_transport_channel.h
++++ b/p2p/base/p2p_transport_channel.h
+@@ -26,6 +26,7 @@
+ #include <set>
+ #include <string>
+ #include <vector>
++#include <regex>
+ 
+ #include "api/async_resolver_factory.h"
+ #include "api/candidate.h"
+@@ -422,6 +423,15 @@ class RTC_EXPORT P2PTransportChannel : public IceTransportInternal {
+     rtc::AsyncResolverInterface* resolver_;
+   };
+   std::vector<CandidateAndResolver> resolvers_ RTC_GUARDED_BY(network_thread_);
++  std::regex uuid_local_hostname_regex_ RTC_GUARDED_BY(network_thread_) = std::regex {
++    "^"
++    "[a-fA-F0-9]{8}-"
++    "[a-fA-F0-9]{4}-"
++    "[a-fA-F0-9]{4}-"
++    "[a-fA-F0-9]{4}-"
++    "[a-fA-F0-9]{12}\\.local"
++    "$"
++  };
+   void FinishAddingRemoteCandidate(const Candidate& new_remote_candidate);
+   void OnCandidateResolved(rtc::AsyncResolverInterface* resolver);
+   void AddRemoteCandidateWithResolver(Candidate candidate,
