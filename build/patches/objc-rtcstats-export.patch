@@ -1,132 +1,27 @@
-diff --git a/sdk/objc/api/peerconnection/RTCPeerConnection+Stats.mm b/sdk/objc/api/peerconnection/RTCPeerConnection+Stats.mm
-index 46a6e3c..8ded552 100644
---- a/sdk/objc/api/peerconnection/RTCPeerConnection+Stats.mm
-+++ b/sdk/objc/api/peerconnection/RTCPeerConnection+Stats.mm
-@@ -28,7 +28,8 @@
-
-   void OnStatsDelivered(const rtc::scoped_refptr<const RTCStatsReport> &report) override {
-     RTC_DCHECK(completion_handler_);
--    RTCStatisticsReport *statisticsReport = [[RTCStatisticsReport alloc] initWithReport:*report];
-+    RTC_OBJC_TYPE(RTCStatisticsReport) *statisticsReport =
-+        [[RTC_OBJC_TYPE(RTCStatisticsReport) alloc] initWithReport:*report];
-     completion_handler_(statisticsReport);
-     completion_handler_ = nil;
-   }
-diff --git a/sdk/objc/api/peerconnection/RTCPeerConnection.h b/sdk/objc/api/peerconnection/RTCPeerConnection.h
-index cfc0a3d..bb8d87b 100644
---- a/sdk/objc/api/peerconnection/RTCPeerConnection.h
-+++ b/sdk/objc/api/peerconnection/RTCPeerConnection.h
-@@ -25,7 +25,7 @@
- @class RTC_OBJC_TYPE(RTCRtpTransceiver);
- @class RTC_OBJC_TYPE(RTCRtpTransceiverInit);
- @class RTC_OBJC_TYPE(RTCSessionDescription);
--@class RTCStatisticsReport;
-+@class RTC_OBJC_TYPE(RTCStatisticsReport);
- @class RTC_OBJC_TYPE(RTCLegacyStatsReport);
-
- typedef NS_ENUM(NSInteger, RTCRtpMediaType);
-@@ -341,7 +341,7 @@
-
- @end
-
--typedef void (^RTCStatisticsCompletionHandler)(RTCStatisticsReport *);
-+typedef void (^RTCStatisticsCompletionHandler)(RTC_OBJC_TYPE(RTCStatisticsReport) *);
-
- @interface RTC_OBJC_TYPE (RTCPeerConnection)
- (Stats)
-diff --git a/sdk/objc/api/peerconnection/RTCStatisticsReport+Private.h b/sdk/objc/api/peerconnection/RTCStatisticsReport+Private.h
-index 0220d18..47c5241 100644
---- a/sdk/objc/api/peerconnection/RTCStatisticsReport+Private.h
-+++ b/sdk/objc/api/peerconnection/RTCStatisticsReport+Private.h
-@@ -12,8 +12,8 @@
-
- #include "api/stats/rtc_stats_report.h"
-
--@interface RTCStatisticsReport (Private)
-+@interface RTC_OBJC_TYPE (RTCStatisticsReport) (Private)
-
--- (instancetype)initWithReport:(const webrtc::RTCStatsReport &)report;
-+- (instancetype)initWithReport : (const webrtc::RTCStatsReport &)report;
-
- @end
 diff --git a/sdk/objc/api/peerconnection/RTCStatisticsReport.h b/sdk/objc/api/peerconnection/RTCStatisticsReport.h
-index 6fbd59b..38d93e8 100644
+index 6fbd59b112..bdd16bc792 100644
 --- a/sdk/objc/api/peerconnection/RTCStatisticsReport.h
 +++ b/sdk/objc/api/peerconnection/RTCStatisticsReport.h
-@@ -10,25 +10,29 @@
-
+@@ -9,12 +9,14 @@
+  */
+ 
  #import <Foundation/Foundation.h>
-
--@class RTCStatistics;
 +#import "RTCMacros.h"
-+
-+@class RTC_OBJC_TYPE(RTCStatistics);
-
+ 
+ @class RTCStatistics;
+ 
  NS_ASSUME_NONNULL_BEGIN
-
+ 
  /** A statistics report. Encapsulates a number of RTCStatistics objects. */
--@interface RTCStatisticsReport : NSObject
 +RTC_OBJC_EXPORT
-+@interface RTC_OBJC_TYPE (RTCStatisticsReport) : NSObject
-
+ @interface RTCStatisticsReport : NSObject
+ 
  /** The timestamp of the report in microseconds since 1970-01-01T00:00:00Z. */
- @property(nonatomic, readonly) CFTimeInterval timestamp_us;
-
- /** RTCStatistics objects by id. */
--@property(nonatomic, readonly) NSDictionary<NSString *, RTCStatistics *> *statistics;
-+@property(nonatomic, readonly) NSDictionary<NSString *, RTC_OBJC_TYPE(RTCStatistics) *> *statistics;
-
- - (instancetype)init NS_UNAVAILABLE;
-
+@@ -28,6 +30,7 @@ NS_ASSUME_NONNULL_BEGIN
  @end
-
+ 
  /** A part of a report (a subreport) covering a certain area. */
--@interface RTCStatistics : NSObject
 +RTC_OBJC_EXPORT
-+@interface RTC_OBJC_TYPE (RTCStatistics) : NSObject
-
+ @interface RTCStatistics : NSObject
+ 
  /** The id of this subreport, e.g. "RTCMediaStreamTrack_receiver_2". */
- @property(nonatomic, readonly) NSString *id;
-diff --git a/sdk/objc/api/peerconnection/RTCStatisticsReport.mm b/sdk/objc/api/peerconnection/RTCStatisticsReport.mm
-index 5269767..ab8006d 100644
---- a/sdk/objc/api/peerconnection/RTCStatisticsReport.mm
-+++ b/sdk/objc/api/peerconnection/RTCStatisticsReport.mm
-@@ -100,7 +100,7 @@
- }
- }  // namespace webrtc
-
--@implementation RTCStatistics
-+@implementation RTC_OBJC_TYPE (RTCStatistics)
-
- @synthesize id = _id;
- @synthesize timestamp_us = _timestamp_us;
-@@ -139,7 +139,7 @@
-
- @end
-
--@implementation RTCStatisticsReport
-+@implementation RTC_OBJC_TYPE (RTCStatisticsReport)
-
- @synthesize timestamp_us = _timestamp_us;
- @synthesize statistics = _statistics;
-@@ -151,16 +151,17 @@
-
- @end
-
--@implementation RTCStatisticsReport (Private)
-+@implementation RTC_OBJC_TYPE (RTCStatisticsReport) (Private)
-
--- (instancetype)initWithReport:(const webrtc::RTCStatsReport &)report {
-+- (instancetype)initWithReport : (const webrtc::RTCStatsReport &)report {
-   if (self = [super init]) {
-     _timestamp_us = report.timestamp_us();
-
-     NSMutableDictionary *statisticsById =
-         [NSMutableDictionary dictionaryWithCapacity:report.size()];
-     for (const auto &stat : report) {
--      RTCStatistics *statistics = [[RTCStatistics alloc] initWithStatistics:stat];
-+      RTC_OBJC_TYPE(RTCStatistics) *statistics =
-+          [[RTC_OBJC_TYPE(RTCStatistics) alloc] initWithStatistics:stat];
-       statisticsById[statistics.id] = statistics;
-     }
-     _statistics = [statisticsById copy];
