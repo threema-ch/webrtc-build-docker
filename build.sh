@@ -4,9 +4,11 @@ docker build --no-cache --ulimit nofile=122880:122880 -t threema/webrtc-build:la
 CONTAINER=$(docker create threema/webrtc-build:latest)
 TARGETS='arm arm64 x86 x64'
 
-# Copy revision file
+# Copy revision and patches file
 mkdir -p out/
 docker cp $CONTAINER:/webrtc/revision.txt out/
+docker cp $CONTAINER:/webrtc/build_args.txt out/
+docker cp $CONTAINER:/webrtc/patches.txt out/
 
 # Copy shared libraries
 for target in $TARGETS; do
