@@ -19,11 +19,11 @@ RUN /bin/bash -c 'set -euo pipefail; shopt -s nullglob; for p in patches/*.patch
 # Build for ARM
 RUN gn gen out/arm --args="is_debug=false target_os=\"android\" target_cpu=\"arm\" $WEBRTC_COMPILE_ARGS"
 RUN gn gen out/arm64 --args="is_debug=false target_os=\"android\" target_cpu=\"arm64\" $WEBRTC_COMPILE_ARGS"
-RUN /bin/bash -c "source build/android/envsetup.sh && ninja -C out/arm"
-RUN /bin/bash -c "source build/android/envsetup.sh && ninja -C out/arm64"
+RUN /bin/bash -c "source build/android/envsetup.sh && autoninja -C out/arm webrtc"
+RUN /bin/bash -c "source build/android/envsetup.sh && autoninja -C out/arm64 webrtc"
 
 # Build for x86
 RUN gn gen out/x86 --args="is_debug=false target_os=\"android\" target_cpu=\"x86\" $WEBRTC_COMPILE_ARGS"
 RUN gn gen out/x64 --args="is_debug=false target_os=\"android\" target_cpu=\"x64\" $WEBRTC_COMPILE_ARGS"
-RUN /bin/bash -c "source build/android/envsetup.sh && ninja -C out/x86"
-RUN /bin/bash -c "source build/android/envsetup.sh && ninja -C out/x64"
+RUN /bin/bash -c "source build/android/envsetup.sh && autoninja -C out/x86 webrtc"
+RUN /bin/bash -c "source build/android/envsetup.sh && autoninja -C out/x64 webrtc"
