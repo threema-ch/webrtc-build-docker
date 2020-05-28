@@ -15,3 +15,43 @@ index 7f4b79a53a..1dc5d21241 100644
  
  #ifndef OPENSSL_IS_BORINGSSL
  // The "SSL_CIPHER_standard_name" function is only available in OpenSSL when
+diff --git a/api/crypto/crypto_options.cc b/api/crypto/crypto_options.cc
+index f47e844596..3869bf1f7e 100644
+--- a/api/crypto/crypto_options.cc
++++ b/api/crypto/crypto_options.cc
+@@ -32,25 +32,21 @@ CryptoOptions CryptoOptions::NoGcm() {
+ 
+ std::vector<int> CryptoOptions::GetSupportedDtlsSrtpCryptoSuites() const {
+   std::vector<int> crypto_suites;
+-  // Note: SRTP_AES128_CM_SHA1_80 is what is required to be supported (by
+-  // draft-ietf-rtcweb-security-arch), but SRTP_AES128_CM_SHA1_32 is allowed as
+-  // well, and saves a few bytes per packet if it ends up selected.
+-  // As the cipher suite is potentially insecure, it will only be used if
+-  // enabled by both peers.
+-  if (srtp.enable_aes128_sha1_32_crypto_cipher) {
+-    crypto_suites.push_back(rtc::SRTP_AES128_CM_SHA1_32);
++  // We want to prefer GCM cipher suites even though they increase the packet
++  // size.
++  if (srtp.enable_gcm_crypto_suites) {
++    crypto_suites.push_back(rtc::SRTP_AEAD_AES_256_GCM);
++    crypto_suites.push_back(rtc::SRTP_AEAD_AES_128_GCM);
+   }
++
++  // Note: SRTP_AES128_CM_SHA1_80 is what is required to be supported (by
++  // draft-ietf-rtcweb-security-arch).
++  // SRTP_AES128_CM_SHA1_32 is a joke, so we won't even consider it,
++  // regardless of the boolean option.
+   if (srtp.enable_aes128_sha1_80_crypto_cipher) {
+     crypto_suites.push_back(rtc::SRTP_AES128_CM_SHA1_80);
+   }
+ 
+-  // Note: GCM cipher suites are not the top choice since they increase the
+-  // packet size. In order to negotiate them the other side must not support
+-  // SRTP_AES128_CM_SHA1_80.
+-  if (srtp.enable_gcm_crypto_suites) {
+-    crypto_suites.push_back(rtc::SRTP_AEAD_AES_256_GCM);
+-    crypto_suites.push_back(rtc::SRTP_AEAD_AES_128_GCM);
+-  }
+   RTC_CHECK(!crypto_suites.empty());
+   return crypto_suites;
+ }
