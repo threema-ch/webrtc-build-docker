@@ -8,8 +8,10 @@ ENV WEBRTC_COMPILE_ARGS="symbol_level=1 enable_libaom=false"
 WORKDIR /webrtc/src
 RUN git checkout master && git pull && gclient sync
 
-# Log revision
+# Log revision and build args
 RUN git log --pretty=fuller HEAD...HEAD^ > /webrtc/revision.txt
+RUN echo "WEBRTC_COMPILE_ARGS: $WEBRTC_COMPILE_ARGS" >> /webrtc/build_args.txt \
+ && echo "GYP_DEFINES: $GYP_DEFINES" >> /webrtc/build_args.txt
 
 # Apply patches
 RUN mkdir /webrtc/src/patches
