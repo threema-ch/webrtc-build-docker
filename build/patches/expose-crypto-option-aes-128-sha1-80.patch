@@ -124,7 +124,7 @@ index eeb94939f3..b7e57dac32 100644
               srtpEnableAes128Sha1_32CryptoCipher:config.crypto_options->srtp
                                                       .enable_aes128_sha1_32_crypto_cipher
 +             srtpEnableAes128Sha1_80CryptoCipher:config.crypto_options->srtp
-+                                                     .srtpEnableAes128Sha1_80CryptoCipher
++                                                     .enable_aes128_sha1_80_crypto_cipher
            srtpEnableEncryptedRtpHeaderExtensions:config.crypto_options->srtp
                                                       .enable_encrypted_rtp_header_extensions
                      sframeRequireFrameEncryption:config.crypto_options->sframe
