@@ -129,24 +129,22 @@ index eeb94939f3..b7e57dac32 100644
                                                       .enable_encrypted_rtp_header_extensions
                      sframeRequireFrameEncryption:config.crypto_options->sframe
 diff --git a/sdk/objc/api/peerconnection/RTCCryptoOptions.h b/sdk/objc/api/peerconnection/RTCCryptoOptions.h
-index b465bb5a73..ccea9bf8bd 100644
+index b465bb5a73..f0f16d6280 100644
 --- a/sdk/objc/api/peerconnection/RTCCryptoOptions.h
 +++ b/sdk/objc/api/peerconnection/RTCCryptoOptions.h
-@@ -33,6 +33,13 @@ RTC_OBJC_EXPORT
+@@ -33,6 +33,11 @@ RTC_OBJC_EXPORT
   * other ciphers get preferred.
   */
  @property(nonatomic, assign) BOOL srtpEnableAes128Sha1_32CryptoCipher;
 +/**
-+ * If set to true, the (potentially insecure) crypto cipher
-+ * SRTP_AES128_CM_SHA1_80 will be included in the list of supported ciphers
-+ * during negotiation. It will only be used if both peers support it and no
-+ * other ciphers get preferred.
++ * If set to true, the crypto cipher SRTP_AES128_CM_SHA1_80 will be included in
++ * the list of supported ciphers during negotiation.
 + */
 +@property(nonatomic, assign) BOOL srtpEnableAes128Sha1_80CryptoCipher;
  /**
   * If set to true, encrypted RTP header extensions as defined in RFC 6904
   * will be negotiated. They will only be used if both peers support them.
-@@ -52,6 +59,7 @@ RTC_OBJC_EXPORT
+@@ -52,6 +57,7 @@ RTC_OBJC_EXPORT
   */
  - (instancetype)initWithSrtpEnableGcmCryptoSuites:(BOOL)srtpEnableGcmCryptoSuites
                srtpEnableAes128Sha1_32CryptoCipher:(BOOL)srtpEnableAes128Sha1_32CryptoCipher
