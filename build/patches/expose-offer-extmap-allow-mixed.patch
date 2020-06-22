@@ -1,8 +1,8 @@
 diff --git a/sdk/android/api/org/webrtc/PeerConnection.java b/sdk/android/api/org/webrtc/PeerConnection.java
-index 7891b7f6b4..f6221a70c1 100644
+index 920e2f12c9..dfb3467ffc 100644
 --- a/sdk/android/api/org/webrtc/PeerConnection.java
 +++ b/sdk/android/api/org/webrtc/PeerConnection.java
-@@ -551,6 +551,14 @@ public class PeerConnection {
+@@ -543,6 +543,14 @@ public class PeerConnection {
       */
      @Nullable public CryptoOptions cryptoOptions;
  
@@ -17,9 +17,9 @@ index 7891b7f6b4..f6221a70c1 100644
      /**
       * An optional string that if set will be attached to the
       * TURN_ALLOCATE_REQUEST which can be used to correlate client
-@@ -601,6 +609,9 @@ public class PeerConnection {
-       useMediaTransport = false;
-       useMediaTransportForDataChannels = false;
+@@ -591,6 +599,9 @@ public class PeerConnection {
+       sdpSemantics = SdpSemantics.PLAN_B;
+       activeResetSrtpParams = false;
        cryptoOptions = null;
 +      // TODO(webrtc:9985): Change default to true once sufficient time has
 +      // passed.
@@ -27,7 +27,7 @@ index 7891b7f6b4..f6221a70c1 100644
        turnLoggingId = null;
        allowCodecSwitching = null;
      }
-@@ -828,6 +839,11 @@ public class PeerConnection {
+@@ -808,6 +819,11 @@ public class PeerConnection {
        return cryptoOptions;
      }
  
@@ -40,11 +40,11 @@ index 7891b7f6b4..f6221a70c1 100644
      @CalledByNative("RTCConfiguration")
      String getTurnLoggingId() {
 diff --git a/sdk/android/src/jni/pc/peer_connection.cc b/sdk/android/src/jni/pc/peer_connection.cc
-index 0ae39fbf66..02ce2d8a5c 100644
+index 05e940ee80..04d08c919a 100644
 --- a/sdk/android/src/jni/pc/peer_connection.cc
 +++ b/sdk/android/src/jni/pc/peer_connection.cc
-@@ -271,6 +271,8 @@ void JavaToNativeRTCConfiguration(
-                                                                 j_rtc_config);
+@@ -266,6 +266,8 @@ void JavaToNativeRTCConfiguration(
+       Java_RTCConfiguration_getActiveResetSrtpParams(jni, j_rtc_config);
    rtc_config->crypto_options =
        JavaToNativeOptionalCryptoOptions(jni, j_crypto_options);
 +  rtc_config->offer_extmap_allow_mixed =
@@ -53,7 +53,7 @@ index 0ae39fbf66..02ce2d8a5c 100644
    rtc_config->allow_codec_switching = JavaToNativeOptionalBool(
        jni, Java_RTCConfiguration_getAllowCodecSwitching(jni, j_rtc_config));
 diff --git a/sdk/objc/api/peerconnection/RTCConfiguration.h b/sdk/objc/api/peerconnection/RTCConfiguration.h
-index 44d09228a4..92fbcd5b06 100644
+index 86eaa6cee5..32ebd6f0e9 100644
 --- a/sdk/objc/api/peerconnection/RTCConfiguration.h
 +++ b/sdk/objc/api/peerconnection/RTCConfiguration.h
 @@ -197,6 +197,13 @@ RTC_OBJC_EXPORT
@@ -68,32 +68,32 @@ index 44d09228a4..92fbcd5b06 100644
 +@property(nonatomic, assign) BOOL offerExtmapAllowMixed;
 +
  /**
-  * If MediaTransportFactory is provided in PeerConnectionFactory, this flag informs PeerConnection
-  * that it should use the MediaTransportInterface.
+  * Defines advanced optional cryptographic settings related to SRTP and
+  * frame encryption for native WebRTC. Setting this will overwrite any
 diff --git a/sdk/objc/api/peerconnection/RTCConfiguration.mm b/sdk/objc/api/peerconnection/RTCConfiguration.mm
-index eeb94939f3..472d94b32e 100644
+index 55abbcdb18..a2f75b05c0 100644
 --- a/sdk/objc/api/peerconnection/RTCConfiguration.mm
 +++ b/sdk/objc/api/peerconnection/RTCConfiguration.mm
-@@ -54,6 +54,7 @@
+@@ -52,6 +52,7 @@
+ @synthesize turnCustomizer = _turnCustomizer;
+ @synthesize activeResetSrtpParams = _activeResetSrtpParams;
  @synthesize allowCodecSwitching = _allowCodecSwitching;
- @synthesize useMediaTransport = _useMediaTransport;
- @synthesize useMediaTransportForDataChannels = _useMediaTransportForDataChannels;
 +@synthesize offerExtmapAllowMixed = _offerExtmapAllowMixed;
  @synthesize cryptoOptions = _cryptoOptions;
  @synthesize rtcpAudioReportIntervalMs = _rtcpAudioReportIntervalMs;
  @synthesize rtcpVideoReportIntervalMs = _rtcpVideoReportIntervalMs;
-@@ -107,6 +108,7 @@
+@@ -104,6 +105,7 @@
+     _iceConnectionReceivingTimeout = config.ice_connection_receiving_timeout;
+     _iceBackupCandidatePairPingInterval =
          config.ice_backup_candidate_pair_ping_interval;
-     _useMediaTransport = config.use_media_transport;
-     _useMediaTransportForDataChannels = config.use_media_transport_for_data_channels;
 +    _offerExtmapAllowMixed = config.offer_extmap_allow_mixed;
      _keyType = RTCEncryptionKeyTypeECDSA;
      _iceCandidatePoolSize = config.ice_candidate_pool_size;
      _shouldPruneTurnPorts = config.prune_turn_ports;
-@@ -209,6 +211,7 @@
+@@ -203,6 +205,7 @@
+       _iceConnectionReceivingTimeout;
+   nativeConfig->ice_backup_candidate_pair_ping_interval =
        _iceBackupCandidatePairPingInterval;
-   nativeConfig->use_media_transport = _useMediaTransport;
-   nativeConfig->use_media_transport_for_data_channels = _useMediaTransportForDataChannels;
 +  nativeConfig->offer_extmap_allow_mixed = _offerExtmapAllowMixed;
    rtc::KeyType keyType =
        [[self class] nativeEncryptionKeyTypeForKeyType:_keyType];

@@ -1,14 +1,13 @@
 diff --git a/api/rtp_parameters.cc b/api/rtp_parameters.cc
-index a05b2bfa7b..c08e84333f 100644
+index 28acb68be6..577382fff1 100644
 --- a/api/rtp_parameters.cc
 +++ b/api/rtp_parameters.cc
-@@ -165,50 +165,111 @@ bool RtpExtension::IsEncryptionSupported(absl::string_view uri) {
+@@ -177,50 +177,110 @@ bool RtpExtension::IsEncryptionSupported(absl::string_view uri) {
  #endif
           uri == webrtc::RtpExtension::kAbsoluteCaptureTimeUri ||
           uri == webrtc::RtpExtension::kVideoRotationUri ||
 +         uri == webrtc::RtpExtension::kVideoContentTypeUri ||
 +         uri == webrtc::RtpExtension::kVideoTimingUri ||
-+         uri == webrtc::RtpExtension::kFrameMarkingUri ||
 +         uri == webrtc::RtpExtension::kGenericFrameDescriptorUri00 ||
 +         uri == webrtc::RtpExtension::kDependencyDescriptorUri ||
 +         uri == webrtc::RtpExtension::kColorSpaceUri ||
@@ -134,10 +133,10 @@ index a05b2bfa7b..c08e84333f 100644
  }
  }  // namespace webrtc
 diff --git a/api/rtp_parameters.h b/api/rtp_parameters.h
-index 49c1e0c885..354d7b30e3 100644
+index addd406385..1a6b21c3d3 100644
 --- a/api/rtp_parameters.h
 +++ b/api/rtp_parameters.h
-@@ -250,6 +250,15 @@ struct RTC_EXPORT RtpHeaderExtensionCapability {
+@@ -246,6 +246,15 @@ struct RTC_EXPORT RtpHeaderExtensionCapability {
  
  // RTP header extension, see RFC8285.
  struct RTC_EXPORT RtpExtension {
@@ -153,7 +152,7 @@ index 49c1e0c885..354d7b30e3 100644
    RtpExtension();
    RtpExtension(absl::string_view uri, int id);
    RtpExtension(absl::string_view uri, int id, bool encrypt);
-@@ -264,17 +273,23 @@ struct RTC_EXPORT RtpExtension {
+@@ -260,17 +269,23 @@ struct RTC_EXPORT RtpExtension {
    // Return "true" if the given RTP header extension URI may be encrypted.
    static bool IsEncryptionSupported(absl::string_view uri);
  
@@ -187,7 +186,7 @@ index 49c1e0c885..354d7b30e3 100644
    // Encryption of Header Extensions, see RFC 6904 for details:
    // https://tools.ietf.org/html/rfc6904
 diff --git a/modules/rtp_rtcp/source/rtp_packet.cc b/modules/rtp_rtcp/source/rtp_packet.cc
-index e054bb8306..7d4fb468fd 100644
+index 767c9a0688..eabbaac515 100644
 --- a/modules/rtp_rtcp/source/rtp_packet.cc
 +++ b/modules/rtp_rtcp/source/rtp_packet.cc
 @@ -27,6 +27,7 @@ constexpr size_t kFixedHeaderSize = 12;
@@ -198,7 +197,7 @@ index e054bb8306..7d4fb468fd 100644
  constexpr size_t kOneByteExtensionHeaderLength = 1;
  constexpr size_t kTwoByteExtensionHeaderLength = 2;
  constexpr size_t kDefaultPacketSize = 1500;
-@@ -500,7 +501,7 @@ bool RtpPacket::ParseBuffer(const uint8_t* buffer, size_t size) {
+@@ -499,7 +500,7 @@ bool RtpPacket::ParseBuffer(const uint8_t* buffer, size_t size) {
        return false;
      }
      if (profile != kOneByteExtensionProfileId &&
@@ -208,10 +207,10 @@ index e054bb8306..7d4fb468fd 100644
      } else {
        size_t extension_header_length = profile == kOneByteExtensionProfileId
 diff --git a/pc/channel.cc b/pc/channel.cc
-index f83f5cdd9a..29ea8e50fc 100644
+index e7f62c6aa6..215230a646 100644
 --- a/pc/channel.cc
 +++ b/pc/channel.cc
-@@ -702,19 +702,15 @@ bool BaseChannel::UpdateRemoteStreams_w(
+@@ -721,19 +721,15 @@ bool BaseChannel::UpdateRemoteStreams_w(
    return ret;
  }
  
@@ -238,7 +237,7 @@ index f83f5cdd9a..29ea8e50fc 100644
  }
  
  void BaseChannel::OnMessage(rtc::Message* pmsg) {
-@@ -832,7 +828,7 @@ bool VoiceChannel::SetLocalContent_w(const MediaContentDescription* content,
+@@ -850,7 +846,7 @@ bool VoiceChannel::SetLocalContent_w(const MediaContentDescription* content,
    const AudioContentDescription* audio = content->as_audio();
  
    RtpHeaderExtensions rtp_header_extensions =
@@ -247,7 +246,7 @@ index f83f5cdd9a..29ea8e50fc 100644
    UpdateRtpHeaderExtensionMap(rtp_header_extensions);
    media_channel()->SetExtmapAllowMixed(audio->extmap_allow_mixed());
  
-@@ -889,7 +885,7 @@ bool VoiceChannel::SetRemoteContent_w(const MediaContentDescription* content,
+@@ -914,7 +910,7 @@ bool VoiceChannel::SetRemoteContent_w(const MediaContentDescription* content,
    const AudioContentDescription* audio = content->as_audio();
  
    RtpHeaderExtensions rtp_header_extensions =
@@ -256,7 +255,7 @@ index f83f5cdd9a..29ea8e50fc 100644
  
    AudioSendParameters send_params = last_send_params_;
    RtpSendParametersFromMediaDescription(
-@@ -986,7 +982,7 @@ bool VideoChannel::SetLocalContent_w(const MediaContentDescription* content,
+@@ -1020,7 +1016,7 @@ bool VideoChannel::SetLocalContent_w(const MediaContentDescription* content,
    const VideoContentDescription* video = content->as_video();
  
    RtpHeaderExtensions rtp_header_extensions =
@@ -265,7 +264,7 @@ index f83f5cdd9a..29ea8e50fc 100644
    UpdateRtpHeaderExtensionMap(rtp_header_extensions);
    media_channel()->SetExtmapAllowMixed(video->extmap_allow_mixed());
  
-@@ -1072,7 +1068,7 @@ bool VideoChannel::SetRemoteContent_w(const MediaContentDescription* content,
+@@ -1117,7 +1113,7 @@ bool VideoChannel::SetRemoteContent_w(const MediaContentDescription* content,
    const VideoContentDescription* video = content->as_video();
  
    RtpHeaderExtensions rtp_header_extensions =
@@ -274,7 +273,7 @@ index f83f5cdd9a..29ea8e50fc 100644
  
    VideoSendParameters send_params = last_send_params_;
    RtpSendParametersFromMediaDescription(
-@@ -1217,7 +1213,7 @@ bool RtpDataChannel::SetLocalContent_w(const MediaContentDescription* content,
+@@ -1272,7 +1268,7 @@ bool RtpDataChannel::SetLocalContent_w(const MediaContentDescription* content,
    const RtpDataContentDescription* data = content->as_rtp_data();
  
    RtpHeaderExtensions rtp_header_extensions =
@@ -283,20 +282,20 @@ index f83f5cdd9a..29ea8e50fc 100644
  
    DataRecvParameters recv_params = last_recv_params_;
    RtpParametersFromMediaDescription(
-@@ -1278,7 +1274,7 @@ bool RtpDataChannel::SetRemoteContent_w(const MediaContentDescription* content,
+@@ -1340,7 +1336,7 @@ bool RtpDataChannel::SetRemoteContent_w(const MediaContentDescription* content,
    }
  
    RtpHeaderExtensions rtp_header_extensions =
 -      GetFilteredRtpHeaderExtensions(data->rtp_header_extensions());
 +      GetDeduplicatedRtpHeaderExtensions(data->rtp_header_extensions());
  
-   RTC_LOG(LS_INFO) << "Setting remote data description";
+   RTC_LOG(LS_INFO) << "Setting remote data description for " << ToString();
    DataSendParameters send_params = last_send_params_;
 diff --git a/pc/channel.h b/pc/channel.h
-index 238a8e20fe..1fc51aa0df 100644
+index 5ae5e5241e..ea1806fc5b 100644
 --- a/pc/channel.h
 +++ b/pc/channel.h
-@@ -250,10 +250,11 @@ class BaseChannel : public ChannelInterface,
+@@ -246,10 +246,11 @@ class BaseChannel : public ChannelInterface,
    virtual bool SetRemoteContent_w(const MediaContentDescription* content,
                                    webrtc::SdpType type,
                                    std::string* error_desc) = 0;
@@ -312,48 +311,11 @@ index 238a8e20fe..1fc51aa0df 100644
        const RtpHeaderExtensions& extensions);
  
    // From MessageHandler
-diff --git a/pc/datagram_rtp_transport.cc b/pc/datagram_rtp_transport.cc
-index ad1e6dc995..06b13597b4 100644
---- a/pc/datagram_rtp_transport.cc
-+++ b/pc/datagram_rtp_transport.cc
-@@ -57,6 +57,7 @@ constexpr size_t kMaxRtcpFeedbackPacketSize = 1250;
- 
- DatagramRtpTransport::DatagramRtpTransport(
-     const std::vector<RtpExtension>& rtp_header_extensions,
-+    RtpExtension::Filter rtp_header_extensions_filter,
-     cricket::IceTransportInternal* ice_transport,
-     DatagramTransportInterface* datagram_transport)
-     : ice_transport_(ice_transport),
-@@ -66,8 +67,10 @@ DatagramRtpTransport::DatagramRtpTransport(
-   // Save extension map for parsing RTP packets (we only need transport
-   // sequence numbers).
-   const RtpExtension* transport_sequence_number_extension =
--      RtpExtension::FindHeaderExtensionByUri(rtp_header_extensions,
--                                             TransportSequenceNumber::kUri);
-+      RtpExtension::FindHeaderExtensionByUri(
-+        rtp_header_extensions,
-+        TransportSequenceNumber::kUri,
-+        rtp_header_extensions_filter);
- 
-   if (transport_sequence_number_extension != nullptr) {
-     rtp_header_extension_map_.Register<TransportSequenceNumber>(
-diff --git a/pc/datagram_rtp_transport.h b/pc/datagram_rtp_transport.h
-index f9684c69c0..4b388ec2e8 100644
---- a/pc/datagram_rtp_transport.h
-+++ b/pc/datagram_rtp_transport.h
-@@ -44,6 +44,7 @@ class DatagramRtpTransport : public RtpTransportInternal,
-  public:
-   DatagramRtpTransport(
-       const std::vector<webrtc::RtpExtension>& rtp_header_extensions,
-+      webrtc::RtpExtension::Filter rtp_header_extensions_filter,
-       cricket::IceTransportInternal* ice_transport,
-       DatagramTransportInterface* datagram_transport);
- 
 diff --git a/pc/jsep_transport_controller.cc b/pc/jsep_transport_controller.cc
-index 39451d5c06..dbe1640230 100644
+index 5c249e013c..a12f67c77c 100644
 --- a/pc/jsep_transport_controller.cc
 +++ b/pc/jsep_transport_controller.cc
-@@ -1039,7 +1039,10 @@ int JsepTransportController::GetRtpAbsSendTimeHeaderExtensionId(
+@@ -1000,7 +1000,10 @@ int JsepTransportController::GetRtpAbsSendTimeHeaderExtensionId(
    const webrtc::RtpExtension* send_time_extension =
        webrtc::RtpExtension::FindHeaderExtensionByUri(
            content_desc->rtp_header_extensions(),
@@ -365,21 +327,11 @@ index 39451d5c06..dbe1640230 100644
    return send_time_extension ? send_time_extension->id : -1;
  }
  
-@@ -1206,6 +1209,9 @@ RTCError JsepTransportController::MaybeCreateJsepTransport(
-     RTC_DCHECK(!rtcp_dtls_transport);
-     datagram_rtp_transport = std::make_unique<DatagramRtpTransport>(
-         content_info.media_description()->rtp_header_extensions(),
-+        config_.crypto_options.srtp.enable_encrypted_rtp_header_extensions
-+          ? RtpExtension::Filter::kPreferEncryptedExtension
-+          : RtpExtension::Filter::kDiscardEncryptedExtension,
-         ice->internal(), datagram_transport.get());
-   }
- 
 diff --git a/pc/media_session.cc b/pc/media_session.cc
-index a9c523d430..df27311bbd 100644
+index 45af823d93..e14b383ff0 100644
 --- a/pc/media_session.cc
 +++ b/pc/media_session.cc
-@@ -924,68 +924,6 @@ static Codecs MatchCodecPreference(
+@@ -908,68 +908,6 @@ static Codecs MatchCodecPreference(
    return filtered_codecs;
  }
  
@@ -448,7 +400,7 @@ index a9c523d430..df27311bbd 100644
  // Adds all extensions from |reference_extensions| to |offered_extensions| that
  // don't already exist in |offered_extensions| and ensure the IDs don't
  // collide. If an extension is added, it's also added to |regular_extensions| or
-@@ -1000,22 +938,25 @@ static void MergeRtpHdrExts(const RtpHeaderExtensions& reference_extensions,
+@@ -984,22 +922,25 @@ static void MergeRtpHdrExts(const RtpHeaderExtensions& reference_extensions,
                              RtpHeaderExtensions* encrypted_extensions,
                              UsedRtpHeaderExtensionIds* used_ids) {
    for (auto reference_extension : reference_extensions) {
@@ -483,7 +435,7 @@ index a9c523d430..df27311bbd 100644
          } else {
            used_ids->FindAndSetIdUsed(&reference_extension);
            regular_extensions->push_back(reference_extension);
-@@ -1026,41 +967,60 @@ static void MergeRtpHdrExts(const RtpHeaderExtensions& reference_extensions,
+@@ -1010,41 +951,60 @@ static void MergeRtpHdrExts(const RtpHeaderExtensions& reference_extensions,
    }
  }
  
@@ -568,7 +520,7 @@ index a9c523d430..df27311bbd 100644
      RtpHeaderExtensions* negotiated_extensions) {
    // TransportSequenceNumberV2 is not offered by default. The special logic for
    // the TransportSequenceNumber extensions works as follows:
-@@ -1071,7 +1031,7 @@ static void NegotiateRtpHeaderExtensions(
+@@ -1055,7 +1015,7 @@ static void NegotiateRtpHeaderExtensions(
    const webrtc::RtpExtension* transport_sequence_number_v2_offer =
        webrtc::RtpExtension::FindHeaderExtensionByUri(
            offered_extensions,
@@ -577,7 +529,7 @@ index a9c523d430..df27311bbd 100644
  
    bool frame_descriptor_in_local = false;
    bool dependency_descriptor_in_local = false;
-@@ -1084,10 +1044,9 @@ static void NegotiateRtpHeaderExtensions(
+@@ -1068,10 +1028,9 @@ static void NegotiateRtpHeaderExtensions(
        dependency_descriptor_in_local = true;
      else if (ours.uri == webrtc::RtpExtension::kAbsoluteCaptureTimeUri)
        abs_capture_time_in_local = true;
@@ -591,7 +543,7 @@ index a9c523d430..df27311bbd 100644
        if (transport_sequence_number_v2_offer &&
            ours.uri == webrtc::RtpExtension::kTransportSequenceNumberUri) {
          // Don't respond to
-@@ -1097,7 +1056,7 @@ static void NegotiateRtpHeaderExtensions(
+@@ -1081,7 +1040,7 @@ static void NegotiateRtpHeaderExtensions(
          continue;
        } else {
          // We respond with their RTP header extension id.
@@ -600,7 +552,7 @@ index a9c523d430..df27311bbd 100644
        }
      }
    }
-@@ -1109,28 +1068,38 @@ static void NegotiateRtpHeaderExtensions(
+@@ -1093,28 +1052,38 @@ static void NegotiateRtpHeaderExtensions(
  
    // Frame descriptors support. If the extension is not present locally, but is
    // in the offer, we add it to the list.
@@ -657,7 +609,7 @@ index a9c523d430..df27311bbd 100644
    }
  }
  
-@@ -1185,10 +1154,14 @@ static bool CreateMediaContentAnswer(
+@@ -1169,10 +1138,14 @@ static bool CreateMediaContentAnswer(
      bool bundle_enabled,
      MediaContentDescription* answer) {
    answer->set_extmap_allow_mixed_enum(offer->extmap_allow_mixed_enum());
@@ -674,10 +626,10 @@ index a9c523d430..df27311bbd 100644
  
    answer->set_rtcp_mux(session_options.rtcp_mux_enabled && offer->rtcp_mux());
 diff --git a/pc/peer_connection.cc b/pc/peer_connection.cc
-index 05e7b95591..b68f328f92 100644
+index 367a50e689..6c2be5b039 100644
 --- a/pc/peer_connection.cc
 +++ b/pc/peer_connection.cc
-@@ -3688,13 +3688,19 @@ static RTCError UpdateSimulcastLayerStatusInSender(
+@@ -3639,13 +3639,19 @@ static RTCError UpdateSimulcastLayerStatusInSender(
  
  static bool SimulcastIsRejected(
      const ContentInfo* local_content,
@@ -699,7 +651,7 @@ index 05e7b95591..b68f328f92 100644
    return simulcast_offered && (!simulcast_answered || !rids_supported);
  }
  
-@@ -3796,7 +3802,11 @@ PeerConnection::AssociateTransceiver(cricket::ContentSource source,
+@@ -3747,7 +3753,11 @@ PeerConnection::AssociateTransceiver(cricket::ContentSource source,
      }
      // Check if the offer indicated simulcast but the answer rejected it.
      // This can happen when simulcast is not supported on the remote party.
@@ -727,10 +679,10 @@ index bfd19b8c7a..7dcc194d36 100644
      return rtp_header_extensions_;
    }
 diff --git a/pc/webrtc_sdp.cc b/pc/webrtc_sdp.cc
-index f77327faf1..f5716a5aa6 100644
+index 6d65309769..28129eeff8 100644
 --- a/pc/webrtc_sdp.cc
 +++ b/pc/webrtc_sdp.cc
-@@ -343,7 +343,7 @@ static bool ParseIceOptions(const std::string& line,
+@@ -340,7 +340,7 @@ static bool ParseIceOptions(const std::string& line,
                              std::vector<std::string>* transport_options,
                              SdpParseError* error);
  static bool ParseExtmap(const std::string& line,
@@ -739,7 +691,7 @@ index f77327faf1..f5716a5aa6 100644
                          SdpParseError* error);
  static bool ParseFingerprintAttribute(
      const std::string& line,
-@@ -1282,7 +1282,7 @@ bool ParseSctpMaxMessageSize(const std::string& line,
+@@ -1268,7 +1268,7 @@ bool ParseSctpMaxMessageSize(const std::string& line,
  }
  
  bool ParseExtmap(const std::string& line,
@@ -748,7 +700,7 @@ index f77327faf1..f5716a5aa6 100644
                   SdpParseError* error) {
    // RFC 5285
    // a=extmap:<value>["/"<direction>] <URI> <extensionattributes>
-@@ -1321,9 +1321,21 @@ bool ParseExtmap(const std::string& line,
+@@ -1307,9 +1307,21 @@ bool ParseExtmap(const std::string& line,
      if (uri == RtpExtension::kEncryptHeaderExtensionsUri) {
        return ParseFailed(line, "Recursive encrypted header.", error);
      }
@@ -771,7 +723,7 @@ index f77327faf1..f5716a5aa6 100644
    return true;
  }
  
-@@ -2283,11 +2295,13 @@ bool ParseSessionDescription(const std::string& message,
+@@ -2244,11 +2256,13 @@ bool ParseSessionDescription(const std::string& message,
      } else if (HasAttribute(line, kAttributeExtmapAllowMixed)) {
        desc->set_extmap_allow_mixed(true);
      } else if (HasAttribute(line, kAttributeExtmap)) {
@@ -788,7 +740,7 @@ index f77327faf1..f5716a5aa6 100644
      }
    }
  
-@@ -3248,11 +3262,13 @@ bool ParseContent(const std::string& message,
+@@ -3202,11 +3216,13 @@ bool ParseContent(const std::string& message,
          media_desc->set_extmap_allow_mixed_enum(
              MediaContentDescription::kMedia);
        } else if (HasAttribute(line, kAttributeExtmap)) {
