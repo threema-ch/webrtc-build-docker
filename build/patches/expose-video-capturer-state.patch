@@ -1,0 +1,98 @@
+diff --git a/sdk/android/api/org/webrtc/FileVideoCapturer.java b/sdk/android/api/org/webrtc/FileVideoCapturer.java
+index 8270367970..364f8e4de4 100644
+--- a/sdk/android/api/org/webrtc/FileVideoCapturer.java
++++ b/sdk/android/api/org/webrtc/FileVideoCapturer.java
+@@ -145,6 +145,7 @@ public class FileVideoCapturer implements VideoCapturer {
+   private final VideoReader videoReader;
+   private CapturerObserver capturerObserver;
+   private final Timer timer = new Timer();
++  private boolean isCapturing = false;
+ 
+   private final TimerTask tickTask = new TimerTask() {
+     @Override
+@@ -177,11 +178,13 @@ public class FileVideoCapturer implements VideoCapturer {
+   @Override
+   public void startCapture(int width, int height, int framerate) {
+     timer.schedule(tickTask, 0, 1000 / framerate);
++    isCapturing = true;
+   }
+ 
+   @Override
+   public void stopCapture() throws InterruptedException {
+     timer.cancel();
++    isCapturing = false;
+   }
+ 
+   @Override
+@@ -189,6 +192,11 @@ public class FileVideoCapturer implements VideoCapturer {
+     // Empty on purpose
+   }
+ 
++  @Override
++  public boolean isCapturing() {
++    return isCapturing;
++  }
++
+   @Override
+   public void dispose() {
+     videoReader.close();
+diff --git a/sdk/android/api/org/webrtc/ScreenCapturerAndroid.java b/sdk/android/api/org/webrtc/ScreenCapturerAndroid.java
+index bff5ad74a2..8c8e62da97 100644
+--- a/sdk/android/api/org/webrtc/ScreenCapturerAndroid.java
++++ b/sdk/android/api/org/webrtc/ScreenCapturerAndroid.java
+@@ -170,7 +170,7 @@ public class ScreenCapturerAndroid implements VideoCapturer, VideoSink {
+     this.height = height;
+ 
+     if (virtualDisplay == null) {
+-      // Capturer is stopped, the virtual display will be created in startCaptuer().
++      // Capturer is stopped, the virtual display will be created in startCapture().
+       return;
+     }
+ 
+@@ -186,6 +186,12 @@ public class ScreenCapturerAndroid implements VideoCapturer, VideoSink {
+     });
+   }
+ 
++  @Override
++  public boolean isCapturing() {
++    // The virtual display is created in startCapture() and set to null in stopCapture()
++    return virtualDisplay != null;
++  }
++
+   private void createVirtualDisplay() {
+     surfaceTextureHelper.setTextureSize(width, height);
+     virtualDisplay = mediaProjection.createVirtualDisplay("WebRTC_ScreenCapture", width, height,
+diff --git a/sdk/android/api/org/webrtc/VideoCapturer.java b/sdk/android/api/org/webrtc/VideoCapturer.java
+index 67eb7ab086..5425657df0 100644
+--- a/sdk/android/api/org/webrtc/VideoCapturer.java
++++ b/sdk/android/api/org/webrtc/VideoCapturer.java
+@@ -41,6 +41,11 @@ public interface VideoCapturer {
+ 
+   void changeCaptureFormat(int width, int height, int framerate);
+ 
++  /**
++   * Return whether capturing is currently active.
++   */
++  boolean isCapturing();
++
+   /**
+    * Perform any final cleanup here. No more capturing will be done after this call.
+    */
+diff --git a/sdk/android/src/java/org/webrtc/CameraCapturer.java b/sdk/android/src/java/org/webrtc/CameraCapturer.java
+index 47519d765f..df62833225 100644
+--- a/sdk/android/src/java/org/webrtc/CameraCapturer.java
++++ b/sdk/android/src/java/org/webrtc/CameraCapturer.java
+@@ -312,6 +312,13 @@ abstract class CameraCapturer implements CameraVideoCapturer {
+     Logging.d(TAG, "Stop capture done");
+   }
+ 
++  @Override
++  public boolean isCapturing() {
++    synchronized (stateLock) {
++      return sessionOpening || currentSession != null;
++    }
++  }
++
+   @Override
+   public void changeCaptureFormat(int width, int height, int framerate) {
+     Logging.d(TAG, "changeCaptureFormat: " + width + "x" + height + "@" + framerate);
