@@ -1,15 +1,7 @@
 #!/bin/bash
 set -euo pipefail
-if [[ ! -v WEBRTC_TARGETS ]]; then
-    TARGETS="arm arm64 x86 x64"
-else
-    TARGETS="${WEBRTC_TARGETS}"
-fi
-if [[ ! -v WEBRTC_BUILD_ARGS ]]; then
-    BUILD_ARGS="symbol_level=1 enable_libaom=false"
-else
-    BUILD_ARGS="${WEBRTC_BUILD_ARGS}"
-fi
+TARGETS="${WEBRTC_TARGETS:-arm arm64 x86 x64}"
+BUILD_ARGS="${WEBRTC_BUILD_ARGS:-symbol_level=1 enable_libaom=false}"
 
 function print_usage {
     echo "Usage: $0 <command> [<args>]"
