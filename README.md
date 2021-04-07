@@ -1,28 +1,69 @@
-# WebRTC PeerConnection Build Script
+# libwebrtc Build Script
 
-This is a Dockerfile to build the WebRTC PeerConnection for Android
-using the new GN based build system.
+This is a Dockerfile to build libwebrtc for Android using the new GN based
+build system.
 
 **NOTE: We do not provide any support related to building special versions, or
 related to issues with your Docker installation, or with regard to bugs in the
 WebRTC codebase itself. We also do not provide any support on how to integrate
 the resulting build into your application.**
 
+## TL;DR
+
+For an initial build:
+
+    ./cli.sh build-tools
+    ./cli.sh fetch
+    ./cli.sh patch
+    ./cli.sh build-all
+
+For subsequent builds after an update:
+
+    ./cli.sh update
+    ./cli.sh patch
+    ./cli.sh build-all
+
 ## Usage
 
-First, build the base image:
+First, build the tools image:
 
-    ./build-base.sh
+    ./cli.sh build-tools
 
-This will download lots and lots of data from the Chromium project. On our test
-system, it took about 1-1.5 hours with a resulting image being 47 GiB.
+This will download and install necessary tools to work with the libwebrtc code
+base.
 
-Then, start the actual build process based on the previously downloaded data:
+Then, fetch the libwebrtc code into the `webrtc` directory. This will download
+~24 GiB and may take a while.
 
-    ./build.sh
+    ./cli.sh fetch
 
-This will take probably around 0.5-1 hour. Once the script finished, you'll get
-the following output in the `out/` directory:
+Optionally switch to a specific (release) branch:
+
+    cd webrtc/src
+    git checkout branch-head/<revision>
+    cd -
+
+You can find the corresponding branch head revisions for libwebrtc releases at
+https://chromiumdash.appspot.com/branches
+
+If it has been a while since you fetched the code, you may update the code as
+such:
+
+    ./cli.sh update
+
+This will work on any branch but obviously may not switch to the most recent
+code revision (e.g. if on a release branch).
+
+As an optional step, apply our patches:
+
+    ./cli.sh patch
+
+To create a build for all targets, run:
+
+    ./cli.sh build-all
+
+This will take probably around half an hour on a modern computer. Once the
+script finished, you'll get the following output in the `out/` directory:
 
  - `libwebrtc.jar`
  - `arm/libjingle_peerconnection_so.so`
@@ -30,64 +71,32 @@ the following output in the `out/` directory:
  - `arm64/libjingle_peerconnection_so.so`
  - `x64/libjingle_peerconnection_so.so`
  - `revision.txt`
- - `patches.txt`
+ - `patches.txt` (may not exist if no patch has been applied)
  - `build_args.txt`
 
-If you want a non-release build, or if you want to build for other platforms,
-feel free to adjust the Dockerfiles.
+It is also possible to just jump into the build image shell which allows to
+customise the build steps entirely:
 
-To build a certain commit version, adjust the `build/Dockerfile` like this:
+    ./cli.sh run
 
-```diff
-diff --git a/build/Dockerfile b/build/Dockerfile
-index ed471e9..9198581 100644
---- a/build/Dockerfile
-+++ b/build/Dockerfile
-@@ -11,7 +11,7 @@ RUN cd /webrtc/src/third_party \
- 
- # Update code
- WORKDIR /webrtc/src
--RUN git checkout master && git pull && gclient sync
-+RUN git checkout master && git pull && git checkout branch-heads/3987 && gclient sync
- 
- # Apply patches
- RUN mkdir /webrtc/src/patches
-```
+If you haven't updated for a longer period, it might happen that the build
+tools need updating or that the code needs to be fetched again. To clean and
+start from scratch, run:
 
-(Note: You can find the correct branch version at https://chromiumdash.appspot.com/branches)
+    ./cli.sh clean
 
-You'll only have to update the base image from time to time, maybe every few
-weeks to months. It's a big "upfront cost" but it will reduce the duration of
-the actual build.
+## Patches
 
-## Custom patches
+Patches should be created using `git diff` inside the webrtc/src directory and
+stored in the /patches directory to be applied automatically when running
+`./cli.sh patch`.
 
-You can also apply custom patches during the build process. Put a `.patch` file
-inside the `build/patches/` directory, then it should be applied automatically.
-
-The patch should be created using `git diff` inside the /webrtc/src directory
-(checkout of the https://chromium.googlesource.com/external/webrtc.git repo):
-
-    $ git diff > my-changes.patch
-
-## Troubleshooting
-
-### Docker: «No space left on device»
-
-If you use Docker with the `devicemapper` storage driver, it's possible that
-you get "no space left on device" errors even though there's still disk space
-left. This has to do with the way the storage is managed by Docker.
-
-To check the used storage driver, use the `docker info` command.
-
-To solve this issue, either [increase the devicemapper pool
-size](https://jpetazzo.github.io/2014/01/29/docker-device-mapper-resize/) or
-switch to a file system based storage driver like `overlay2`.
+    $ git diff > ../../patches/my-changes.patch
 
 ## License
 
     The MIT License (MIT)
-    Copyright (c) 2016-2020 Threema GmbH
+    Copyright (c) 2016-2021 Threema GmbH
 
     Permission is hereby granted, free of charge, to any person
     obtaining a copy of this software and associated documentation files
