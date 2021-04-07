@@ -1,7 +1,6 @@
 FROM ubuntu:20.04
 
-# Add i386 arch and update apt cache
-# RUN dpkg --add-architecture i386 && apt-get update
+# Update apt cache
 RUN apt-get update
 
 # Install WebRTC base dependencies
@@ -45,7 +44,7 @@ ENV CCACHE_SLOPPINESS include_file_mtime
 # Run as user
 USER $USERNAME
 
-# Run fetch and gclient iniitally since this pulls a lot of data when run
+# Run fetch and gclient initally since this pulls a lot of data when run
 # for the first time
 RUN fetch --help > /dev/null && \
     gclient --help > /dev/null

@@ -72,7 +72,9 @@ case ${1-} in
 
     build-tools)
         echo "Building tools image"
-        docker build --pull --no-cache -t threema/webrtc-build-tools:latest build-tools/
+        docker build --build-arg UID=$(id -u) --build-arg GID=$(id -g) \
+                     --pull --no-cache -t \
+                     threema/webrtc-build-tools:latest build-tools/
         ;;
 
     fetch)
