@@ -44,7 +44,7 @@ ENV CCACHE_SLOPPINESS include_file_mtime
 # Run as user
 USER $USERNAME
 
-# Run fetch and gclient initally since this pulls a lot of data when run
+# Run fetch and gclient initially since this pulls a lot of data when run
 # for the first time
 RUN fetch --help > /dev/null && \
     gclient --help > /dev/null
