@@ -1,24 +1,40 @@
 diff --git a/api/rtp_parameters.cc b/api/rtp_parameters.cc
-index a05b2bfa7b..c08e84333f 100644
+index 8a18f8983f..132c888bd3 100644
 --- a/api/rtp_parameters.cc
 +++ b/api/rtp_parameters.cc
-@@ -165,50 +165,111 @@ bool RtpExtension::IsEncryptionSupported(absl::string_view uri) {
+@@ -170,63 +170,115 @@ bool RtpExtension::IsSupportedForVideo(absl::string_view uri) {
+ }
+ 
+ bool RtpExtension::IsEncryptionSupported(absl::string_view uri) {
+-  return uri == webrtc::RtpExtension::kAudioLevelUri ||
+-         uri == webrtc::RtpExtension::kTimestampOffsetUri ||
+-#if !defined(ENABLE_EXTERNAL_AUTH)
+-         // TODO(jbauch): Figure out a way to always allow "kAbsSendTimeUri"
+-         // here and filter out later if external auth is really used in
+-         // srtpfilter. External auth is used by Chromium and replaces the
+-         // extension header value of "kAbsSendTimeUri", so it must not be
+-         // encrypted (which can't be done by Chromium).
+-         uri == webrtc::RtpExtension::kAbsSendTimeUri ||
++  return
++#if defined(ENABLE_EXTERNAL_AUTH)
++      // TODO(jbauch): Figure out a way to always allow "kAbsSendTimeUri"
++      // here and filter out later if external auth is really used in
++      // srtpfilter. External auth is used by Chromium and replaces the
++      // extension header value of "kAbsSendTimeUri", so it must not be
++      // encrypted (which can't be done by Chromium).
++      uri != webrtc::RtpExtension::kAbsSendTimeUri &&
  #endif
-          uri == webrtc::RtpExtension::kAbsoluteCaptureTimeUri ||
-          uri == webrtc::RtpExtension::kVideoRotationUri ||
-+         uri == webrtc::RtpExtension::kVideoContentTypeUri ||
-+         uri == webrtc::RtpExtension::kVideoTimingUri ||
-+         uri == webrtc::RtpExtension::kFrameMarkingUri ||
-+         uri == webrtc::RtpExtension::kGenericFrameDescriptorUri00 ||
-+         uri == webrtc::RtpExtension::kDependencyDescriptorUri ||
-+         uri == webrtc::RtpExtension::kColorSpaceUri ||
-          uri == webrtc::RtpExtension::kTransportSequenceNumberUri ||
-          uri == webrtc::RtpExtension::kTransportSequenceNumberV2Uri ||
-          uri == webrtc::RtpExtension::kPlayoutDelayUri ||
+-         uri == webrtc::RtpExtension::kAbsoluteCaptureTimeUri ||
+-         uri == webrtc::RtpExtension::kVideoRotationUri ||
+-         uri == webrtc::RtpExtension::kTransportSequenceNumberUri ||
+-         uri == webrtc::RtpExtension::kTransportSequenceNumberV2Uri ||
+-         uri == webrtc::RtpExtension::kPlayoutDelayUri ||
 -         uri == webrtc::RtpExtension::kVideoContentTypeUri ||
-          uri == webrtc::RtpExtension::kMidUri ||
-          uri == webrtc::RtpExtension::kRidUri ||
-          uri == webrtc::RtpExtension::kRepairedRidUri;
+-         uri == webrtc::RtpExtension::kMidUri ||
+-         uri == webrtc::RtpExtension::kRidUri ||
+-         uri == webrtc::RtpExtension::kRepairedRidUri ||
+-         uri == webrtc::RtpExtension::kVideoLayersAllocationUri;
++      uri != webrtc::RtpExtension::kEncryptHeaderExtensionsUri;
  }
  
 -const RtpExtension* RtpExtension::FindHeaderExtensionByUri(
@@ -55,8 +71,8 @@ index a05b2bfa7b..c08e84333f 100644
 +        break;
 +
 +      case kPreferEncryptedExtension:
-+        // We prefer an encrypted extension but we can fall back to an unencrypted
-+        // extension.
++        // We prefer an encrypted extension but we can fall back to an
++        // unencrypted extension.
 +        if (extension.encrypt) {
 +          return &extension;
 +        } else {
@@ -64,9 +80,12 @@ index a05b2bfa7b..c08e84333f 100644
 +        }
 +        break;
 +
-+      default:
-+        RTC_NOTREACHED();
-+        return nullptr;
++      case kRequireEncryptedExtension:
++        // We only accept an encrypted extension.
++        if (extension.encrypt) {
++          return &extension;
++        }
++        break;
 +    }
 +  }
 +
@@ -97,9 +116,17 @@ index a05b2bfa7b..c08e84333f 100644
 -    if (extension->encrypt) {
 -      filtered.push_back(*extension);
 -      continue;
-+
-+  // If we prefer encrypted extensions, add them first
-+  if (filter == kPreferEncryptedExtension) {
+-    }
+ 
+-    // Only add non-encrypted extension if no encrypted with the same URI
+-    // is also present...
+-    if (std::any_of(extension + 1, extensions.end(),
+-                    [&](const RtpExtension& check) {
+-                      return extension->uri == check.uri;
+-                    })) {
+-      continue;
++  // If we do not discard encrypted extensions, add them first
++  if (filter != kDiscardEncryptedExtension) {
 +    for (const auto& extension : extensions) {
 +      if (!extension.encrypt) {
 +        continue;
@@ -110,23 +137,19 @@ index a05b2bfa7b..c08e84333f 100644
      }
 +  }
  
--    // Only add non-encrypted extension if no encrypted with the same URI
--    // is also present...
--    if (std::any_of(extension + 1, extensions.end(),
--                    [&](const RtpExtension& check) {
--                      return extension->uri == check.uri;
--                    })) {
-+  // Add missing, non-encrypted extensions
-+  for (const auto& extension : extensions) {
-+    if (extension.encrypt) {
-       continue;
-     }
--
 -    // ...and has not been added before.
 -    if (!FindHeaderExtensionByUri(filtered, extension->uri)) {
 -      filtered.push_back(*extension);
-+    if (!HeaderExtensionWithUriExists(filtered, extension.uri)) {
-+      filtered.push_back(extension);
++  // If we do not require encrypted extensions, add missing, non-encrypted
++  // extensions.
++  if (filter != kRequireEncryptedExtension) {
++    for (const auto& extension : extensions) {
++      if (extension.encrypt) {
++        continue;
++      }
++      if (!HeaderExtensionWithUriExists(filtered, extension.uri)) {
++        filtered.push_back(extension);
++      }
      }
    }
 +
@@ -134,10 +157,10 @@ index a05b2bfa7b..c08e84333f 100644
  }
  }  // namespace webrtc
 diff --git a/api/rtp_parameters.h b/api/rtp_parameters.h
-index 49c1e0c885..354d7b30e3 100644
+index 7fe9f2bc83..5764d9739c 100644
 --- a/api/rtp_parameters.h
 +++ b/api/rtp_parameters.h
-@@ -250,6 +250,15 @@ struct RTC_EXPORT RtpHeaderExtensionCapability {
+@@ -246,6 +246,18 @@ struct RTC_EXPORT RtpHeaderExtensionCapability {
  
  // RTP header extension, see RFC8285.
  struct RTC_EXPORT RtpExtension {
@@ -145,15 +168,18 @@ index 49c1e0c885..354d7b30e3 100644
 +    // Encrypted extensions will be ignored and only non-encrypted extensions
 +    // will be considered.
 +    kDiscardEncryptedExtension,
-+    // Encrypted extensions will be preferred but will fall back to non-encrypted
-+    // extensions if necessary.
++    // Encrypted extensions will be preferred but will fall back to
++    // non-encrypted extensions if necessary.
 +    kPreferEncryptedExtension,
++    // Encrypted extensions will be required, so any non-encrypted extensions
++    // will be discarded.
++    kRequireEncryptedExtension,
 +  };
 +
    RtpExtension();
    RtpExtension(absl::string_view uri, int id);
    RtpExtension(absl::string_view uri, int id, bool encrypt);
-@@ -264,17 +273,23 @@ struct RTC_EXPORT RtpExtension {
+@@ -260,17 +272,23 @@ struct RTC_EXPORT RtpExtension {
    // Return "true" if the given RTP header extension URI may be encrypted.
    static bool IsEncryptionSupported(absl::string_view uri);
  
@@ -163,22 +189,21 @@ index 49c1e0c885..354d7b30e3 100644
    static const RtpExtension* FindHeaderExtensionByUri(
        const std::vector<RtpExtension>& extensions,
 -      absl::string_view uri);
--
--  // Return a list of RTP header extensions with the non-encrypted extensions
--  // removed if both the encrypted and non-encrypted extension is present for
--  // the same URI.
--  static std::vector<RtpExtension> FilterDuplicateNonEncrypted(
--      const std::vector<RtpExtension>& extensions);
 +      absl::string_view uri,
 +      Filter filter);
 +
 +  // Returns the header extension with the given URI and encrypt parameter,
 +  // if found, otherwise nullptr.
 +  static const RtpExtension* FindHeaderExtensionByUriAndEncryption(
-+    const std::vector<RtpExtension>& extensions,
-+    absl::string_view uri,
-+    bool encrypt);
-+
++      const std::vector<RtpExtension>& extensions,
++      absl::string_view uri,
++      bool encrypt);
+ 
+-  // Return a list of RTP header extensions with the non-encrypted extensions
+-  // removed if both the encrypted and non-encrypted extension is present for
+-  // the same URI.
+-  static std::vector<RtpExtension> FilterDuplicateNonEncrypted(
+-      const std::vector<RtpExtension>& extensions);
 +  // Returns a list of extensions where any extension URI is unique.
 +  static const std::vector<RtpExtension> DeduplicateHeaderExtensions(
 +      const std::vector<RtpExtension>& extensions,
@@ -186,8 +211,266 @@ index 49c1e0c885..354d7b30e3 100644
  
    // Encryption of Header Extensions, see RFC 6904 for details:
    // https://tools.ietf.org/html/rfc6904
+diff --git a/api/rtp_parameters_unittest.cc b/api/rtp_parameters_unittest.cc
+index 5928cbda63..51ad426748 100644
+--- a/api/rtp_parameters_unittest.cc
++++ b/api/rtp_parameters_unittest.cc
+@@ -23,28 +23,249 @@ static const RtpExtension kExtension1(kExtensionUri1, 1);
+ static const RtpExtension kExtension1Encrypted(kExtensionUri1, 10, true);
+ static const RtpExtension kExtension2(kExtensionUri2, 2);
+ 
+-TEST(RtpExtensionTest, FilterDuplicateNonEncrypted) {
++TEST(RtpExtensionTest, DeduplicateHeaderExtensions) {
+   std::vector<RtpExtension> extensions;
+   std::vector<RtpExtension> filtered;
+ 
++  extensions.clear();
++  extensions.push_back(kExtension1);
++  extensions.push_back(kExtension1Encrypted);
++  filtered = RtpExtension::DeduplicateHeaderExtensions(
++      extensions, RtpExtension::Filter::kDiscardEncryptedExtension);
++  EXPECT_EQ(1u, filtered.size());
++  EXPECT_EQ(std::vector<RtpExtension>{kExtension1}, filtered);
++
++  extensions.clear();
++  extensions.push_back(kExtension1);
++  extensions.push_back(kExtension1Encrypted);
++  filtered = RtpExtension::DeduplicateHeaderExtensions(
++      extensions, RtpExtension::Filter::kPreferEncryptedExtension);
++  EXPECT_EQ(1u, filtered.size());
++  EXPECT_EQ(std::vector<RtpExtension>{kExtension1Encrypted}, filtered);
++
++  extensions.clear();
+   extensions.push_back(kExtension1);
+   extensions.push_back(kExtension1Encrypted);
+-  filtered = RtpExtension::FilterDuplicateNonEncrypted(extensions);
++  filtered = RtpExtension::DeduplicateHeaderExtensions(
++      extensions, RtpExtension::Filter::kRequireEncryptedExtension);
++  EXPECT_EQ(1u, filtered.size());
++  EXPECT_EQ(std::vector<RtpExtension>{kExtension1Encrypted}, filtered);
++
++  extensions.clear();
++  extensions.push_back(kExtension1Encrypted);
++  extensions.push_back(kExtension1);
++  filtered = RtpExtension::DeduplicateHeaderExtensions(
++      extensions, RtpExtension::Filter::kDiscardEncryptedExtension);
++  EXPECT_EQ(1u, filtered.size());
++  EXPECT_EQ(std::vector<RtpExtension>{kExtension1}, filtered);
++
++  extensions.clear();
++  extensions.push_back(kExtension1Encrypted);
++  extensions.push_back(kExtension1);
++  filtered = RtpExtension::DeduplicateHeaderExtensions(
++      extensions, RtpExtension::Filter::kPreferEncryptedExtension);
+   EXPECT_EQ(1u, filtered.size());
+   EXPECT_EQ(std::vector<RtpExtension>{kExtension1Encrypted}, filtered);
+ 
+   extensions.clear();
+   extensions.push_back(kExtension1Encrypted);
+   extensions.push_back(kExtension1);
+-  filtered = RtpExtension::FilterDuplicateNonEncrypted(extensions);
++  filtered = RtpExtension::DeduplicateHeaderExtensions(
++      extensions, RtpExtension::Filter::kRequireEncryptedExtension);
+   EXPECT_EQ(1u, filtered.size());
+   EXPECT_EQ(std::vector<RtpExtension>{kExtension1Encrypted}, filtered);
+ 
+   extensions.clear();
+   extensions.push_back(kExtension1);
+   extensions.push_back(kExtension2);
+-  filtered = RtpExtension::FilterDuplicateNonEncrypted(extensions);
++  filtered = RtpExtension::DeduplicateHeaderExtensions(
++      extensions, RtpExtension::Filter::kDiscardEncryptedExtension);
++  EXPECT_EQ(2u, filtered.size());
++  EXPECT_EQ(extensions, filtered);
++  filtered = RtpExtension::DeduplicateHeaderExtensions(
++      extensions, RtpExtension::Filter::kPreferEncryptedExtension);
+   EXPECT_EQ(2u, filtered.size());
+   EXPECT_EQ(extensions, filtered);
++  filtered = RtpExtension::DeduplicateHeaderExtensions(
++      extensions, RtpExtension::Filter::kRequireEncryptedExtension);
++  EXPECT_EQ(0u, filtered.size());
++
++  extensions.clear();
++  extensions.push_back(kExtension1);
++  extensions.push_back(kExtension2);
++  extensions.push_back(kExtension1Encrypted);
++  filtered = RtpExtension::DeduplicateHeaderExtensions(
++      extensions, RtpExtension::Filter::kDiscardEncryptedExtension);
++  EXPECT_EQ(2u, filtered.size());
++  EXPECT_EQ((std::vector<RtpExtension>{kExtension1, kExtension2}), filtered);
++  filtered = RtpExtension::DeduplicateHeaderExtensions(
++      extensions, RtpExtension::Filter::kPreferEncryptedExtension);
++  EXPECT_EQ(2u, filtered.size());
++  EXPECT_EQ((std::vector<RtpExtension>{kExtension1Encrypted, kExtension2}),
++            filtered);
++  filtered = RtpExtension::DeduplicateHeaderExtensions(
++      extensions, RtpExtension::Filter::kRequireEncryptedExtension);
++  EXPECT_EQ(1u, filtered.size());
++  EXPECT_EQ((std::vector<RtpExtension>{kExtension1Encrypted}), filtered);
++}
++
++TEST(RtpExtensionTest, FindHeaderExtensionByUriAndEncryption) {
++  std::vector<RtpExtension> extensions;
++
++  extensions.clear();
++  EXPECT_EQ(nullptr, RtpExtension::FindHeaderExtensionByUriAndEncryption(
++                         extensions, kExtensionUri1, false));
++
++  extensions.clear();
++  extensions.push_back(kExtension1);
++  EXPECT_EQ(kExtension1, *RtpExtension::FindHeaderExtensionByUriAndEncryption(
++                             extensions, kExtensionUri1, false));
++  EXPECT_EQ(nullptr, RtpExtension::FindHeaderExtensionByUriAndEncryption(
++                         extensions, kExtensionUri1, true));
++  EXPECT_EQ(nullptr, RtpExtension::FindHeaderExtensionByUriAndEncryption(
++                         extensions, kExtensionUri2, false));
++
++  extensions.clear();
++  extensions.push_back(kExtension1);
++  extensions.push_back(kExtension2);
++  extensions.push_back(kExtension1Encrypted);
++  EXPECT_EQ(kExtension1, *RtpExtension::FindHeaderExtensionByUriAndEncryption(
++                             extensions, kExtensionUri1, false));
++  EXPECT_EQ(kExtension2, *RtpExtension::FindHeaderExtensionByUriAndEncryption(
++                             extensions, kExtensionUri2, false));
++  EXPECT_EQ(kExtension1Encrypted,
++            *RtpExtension::FindHeaderExtensionByUriAndEncryption(
++                extensions, kExtensionUri1, true));
++  EXPECT_EQ(nullptr, RtpExtension::FindHeaderExtensionByUriAndEncryption(
++                         extensions, kExtensionUri2, true));
++}
++
++TEST(RtpExtensionTest, FindHeaderExtensionByUri) {
++  std::vector<RtpExtension> extensions;
++
++  extensions.clear();
++  EXPECT_EQ(nullptr, RtpExtension::FindHeaderExtensionByUri(
++                         extensions, kExtensionUri1,
++                         RtpExtension::Filter::kDiscardEncryptedExtension));
++  EXPECT_EQ(nullptr, RtpExtension::FindHeaderExtensionByUri(
++                         extensions, kExtensionUri1,
++                         RtpExtension::Filter::kPreferEncryptedExtension));
++  EXPECT_EQ(nullptr, RtpExtension::FindHeaderExtensionByUri(
++                         extensions, kExtensionUri1,
++                         RtpExtension::Filter::kRequireEncryptedExtension));
++
++  extensions.clear();
++  extensions.push_back(kExtension1);
++  EXPECT_EQ(kExtension1, *RtpExtension::FindHeaderExtensionByUri(
++                             extensions, kExtensionUri1,
++                             RtpExtension::Filter::kDiscardEncryptedExtension));
++  EXPECT_EQ(kExtension1, *RtpExtension::FindHeaderExtensionByUri(
++                             extensions, kExtensionUri1,
++                             RtpExtension::Filter::kPreferEncryptedExtension));
++  EXPECT_EQ(nullptr, RtpExtension::FindHeaderExtensionByUri(
++                         extensions, kExtensionUri1,
++                         RtpExtension::Filter::kRequireEncryptedExtension));
++  EXPECT_EQ(nullptr, RtpExtension::FindHeaderExtensionByUri(
++                         extensions, kExtensionUri2,
++                         RtpExtension::Filter::kDiscardEncryptedExtension));
++  EXPECT_EQ(nullptr, RtpExtension::FindHeaderExtensionByUri(
++                         extensions, kExtensionUri2,
++                         RtpExtension::Filter::kPreferEncryptedExtension));
++  EXPECT_EQ(nullptr, RtpExtension::FindHeaderExtensionByUri(
++                         extensions, kExtensionUri2,
++                         RtpExtension::Filter::kRequireEncryptedExtension));
++
++  extensions.clear();
++  extensions.push_back(kExtension1);
++  extensions.push_back(kExtension1Encrypted);
++  EXPECT_EQ(kExtension1, *RtpExtension::FindHeaderExtensionByUri(
++                             extensions, kExtensionUri1,
++                             RtpExtension::Filter::kDiscardEncryptedExtension));
++
++  extensions.clear();
++  extensions.push_back(kExtension1);
++  extensions.push_back(kExtension1Encrypted);
++  EXPECT_EQ(kExtension1Encrypted,
++            *RtpExtension::FindHeaderExtensionByUri(
++                extensions, kExtensionUri1,
++                RtpExtension::Filter::kPreferEncryptedExtension));
++
++  extensions.clear();
++  extensions.push_back(kExtension1);
++  extensions.push_back(kExtension1Encrypted);
++  EXPECT_EQ(kExtension1Encrypted,
++            *RtpExtension::FindHeaderExtensionByUri(
++                extensions, kExtensionUri1,
++                RtpExtension::Filter::kRequireEncryptedExtension));
++
++  extensions.clear();
++  extensions.push_back(kExtension1Encrypted);
++  extensions.push_back(kExtension1);
++  EXPECT_EQ(kExtension1, *RtpExtension::FindHeaderExtensionByUri(
++                             extensions, kExtensionUri1,
++                             RtpExtension::Filter::kDiscardEncryptedExtension));
++
++  extensions.clear();
++  extensions.push_back(kExtension1Encrypted);
++  extensions.push_back(kExtension1);
++  EXPECT_EQ(kExtension1Encrypted,
++            *RtpExtension::FindHeaderExtensionByUri(
++                extensions, kExtensionUri1,
++                RtpExtension::Filter::kPreferEncryptedExtension));
++
++  extensions.clear();
++  extensions.push_back(kExtension1Encrypted);
++  extensions.push_back(kExtension1);
++  EXPECT_EQ(kExtension1Encrypted,
++            *RtpExtension::FindHeaderExtensionByUri(
++                extensions, kExtensionUri1,
++                RtpExtension::Filter::kRequireEncryptedExtension));
++
++  extensions.clear();
++  extensions.push_back(kExtension1);
++  extensions.push_back(kExtension2);
++  EXPECT_EQ(kExtension1, *RtpExtension::FindHeaderExtensionByUri(
++                             extensions, kExtensionUri1,
++                             RtpExtension::Filter::kDiscardEncryptedExtension));
++  EXPECT_EQ(kExtension1, *RtpExtension::FindHeaderExtensionByUri(
++                             extensions, kExtensionUri1,
++                             RtpExtension::Filter::kPreferEncryptedExtension));
++  EXPECT_EQ(nullptr, RtpExtension::FindHeaderExtensionByUri(
++                         extensions, kExtensionUri1,
++                         RtpExtension::Filter::kRequireEncryptedExtension));
++  EXPECT_EQ(kExtension2, *RtpExtension::FindHeaderExtensionByUri(
++                             extensions, kExtensionUri2,
++                             RtpExtension::Filter::kDiscardEncryptedExtension));
++  EXPECT_EQ(kExtension2, *RtpExtension::FindHeaderExtensionByUri(
++                             extensions, kExtensionUri2,
++                             RtpExtension::Filter::kPreferEncryptedExtension));
++  EXPECT_EQ(nullptr, RtpExtension::FindHeaderExtensionByUri(
++                         extensions, kExtensionUri2,
++                         RtpExtension::Filter::kRequireEncryptedExtension));
++
++  extensions.clear();
++  extensions.push_back(kExtension1);
++  extensions.push_back(kExtension2);
++  extensions.push_back(kExtension1Encrypted);
++  EXPECT_EQ(kExtension1, *RtpExtension::FindHeaderExtensionByUri(
++                             extensions, kExtensionUri1,
++                             RtpExtension::Filter::kDiscardEncryptedExtension));
++  EXPECT_EQ(kExtension1Encrypted,
++            *RtpExtension::FindHeaderExtensionByUri(
++                extensions, kExtensionUri1,
++                RtpExtension::Filter::kPreferEncryptedExtension));
++  EXPECT_EQ(kExtension1Encrypted,
++            *RtpExtension::FindHeaderExtensionByUri(
++                extensions, kExtensionUri1,
++                RtpExtension::Filter::kRequireEncryptedExtension));
++  EXPECT_EQ(kExtension2, *RtpExtension::FindHeaderExtensionByUri(
++                             extensions, kExtensionUri2,
++                             RtpExtension::Filter::kDiscardEncryptedExtension));
++  EXPECT_EQ(kExtension2, *RtpExtension::FindHeaderExtensionByUri(
++                             extensions, kExtensionUri2,
++                             RtpExtension::Filter::kPreferEncryptedExtension));
++  EXPECT_EQ(nullptr, RtpExtension::FindHeaderExtensionByUri(
++                         extensions, kExtensionUri2,
++                         RtpExtension::Filter::kRequireEncryptedExtension));
+ }
+ }  // namespace webrtc
 diff --git a/modules/rtp_rtcp/source/rtp_packet.cc b/modules/rtp_rtcp/source/rtp_packet.cc
-index e054bb8306..7d4fb468fd 100644
+index 84769d0f4b..a8134fd124 100644
 --- a/modules/rtp_rtcp/source/rtp_packet.cc
 +++ b/modules/rtp_rtcp/source/rtp_packet.cc
 @@ -27,6 +27,7 @@ constexpr size_t kFixedHeaderSize = 12;
@@ -198,27 +481,27 @@ index e054bb8306..7d4fb468fd 100644
  constexpr size_t kOneByteExtensionHeaderLength = 1;
  constexpr size_t kTwoByteExtensionHeaderLength = 2;
  constexpr size_t kDefaultPacketSize = 1500;
-@@ -500,7 +501,7 @@ bool RtpPacket::ParseBuffer(const uint8_t* buffer, size_t size) {
+@@ -501,7 +502,8 @@ bool RtpPacket::ParseBuffer(const uint8_t* buffer, size_t size) {
        return false;
      }
      if (profile != kOneByteExtensionProfileId &&
 -        profile != kTwoByteExtensionProfileId) {
-+        (profile & kTwobyteExtensionProfileIdAppBitsFilter) != kTwoByteExtensionProfileId) {
++        (profile & kTwobyteExtensionProfileIdAppBitsFilter) !=
++            kTwoByteExtensionProfileId) {
        RTC_LOG(LS_WARNING) << "Unsupported rtp extension " << profile;
      } else {
        size_t extension_header_length = profile == kOneByteExtensionProfileId
 diff --git a/pc/channel.cc b/pc/channel.cc
-index f83f5cdd9a..29ea8e50fc 100644
+index f37be6716b..872dc5693c 100644
 --- a/pc/channel.cc
 +++ b/pc/channel.cc
-@@ -702,19 +702,15 @@ bool BaseChannel::UpdateRemoteStreams_w(
+@@ -772,18 +772,12 @@ bool BaseChannel::UpdateRemoteStreams_w(
    return ret;
  }
  
 -RtpHeaderExtensions BaseChannel::GetFilteredRtpHeaderExtensions(
 +RtpHeaderExtensions BaseChannel::GetDeduplicatedRtpHeaderExtensions(
      const RtpHeaderExtensions& extensions) {
-   RTC_DCHECK(rtp_transport_);
 -  if (crypto_options_.srtp.enable_encrypted_rtp_header_extensions) {
 -    RtpHeaderExtensions filtered;
 -    absl::c_copy_if(extensions, std::back_inserter(filtered),
@@ -230,16 +513,14 @@ index f83f5cdd9a..29ea8e50fc 100644
 -
 -  return webrtc::RtpExtension::FilterDuplicateNonEncrypted(extensions);
 +  return webrtc::RtpExtension::DeduplicateHeaderExtensions(
-+    extensions,
-+    crypto_options_.srtp.enable_encrypted_rtp_header_extensions
-+      ? webrtc::RtpExtension::kPreferEncryptedExtension
-+      : webrtc::RtpExtension::kDiscardEncryptedExtension
-+  );
++      extensions, crypto_options_.srtp.enable_encrypted_rtp_header_extensions
++                      ? webrtc::RtpExtension::kPreferEncryptedExtension
++                      : webrtc::RtpExtension::kDiscardEncryptedExtension);
  }
  
  void BaseChannel::OnMessage(rtc::Message* pmsg) {
-@@ -832,7 +828,7 @@ bool VoiceChannel::SetLocalContent_w(const MediaContentDescription* content,
-   const AudioContentDescription* audio = content->as_audio();
+@@ -911,7 +905,7 @@ bool VoiceChannel::SetLocalContent_w(const MediaContentDescription* content,
+     SetNegotiatedHeaderExtensions_w(audio->rtp_header_extensions());
  
    RtpHeaderExtensions rtp_header_extensions =
 -      GetFilteredRtpHeaderExtensions(audio->rtp_header_extensions());
@@ -247,8 +528,8 @@ index f83f5cdd9a..29ea8e50fc 100644
    UpdateRtpHeaderExtensionMap(rtp_header_extensions);
    media_channel()->SetExtmapAllowMixed(audio->extmap_allow_mixed());
  
-@@ -889,7 +885,7 @@ bool VoiceChannel::SetRemoteContent_w(const MediaContentDescription* content,
-   const AudioContentDescription* audio = content->as_audio();
+@@ -978,7 +972,7 @@ bool VoiceChannel::SetRemoteContent_w(const MediaContentDescription* content,
+     SetNegotiatedHeaderExtensions_w(audio->rtp_header_extensions());
  
    RtpHeaderExtensions rtp_header_extensions =
 -      GetFilteredRtpHeaderExtensions(audio->rtp_header_extensions());
@@ -256,8 +537,8 @@ index f83f5cdd9a..29ea8e50fc 100644
  
    AudioSendParameters send_params = last_send_params_;
    RtpSendParametersFromMediaDescription(
-@@ -986,7 +982,7 @@ bool VideoChannel::SetLocalContent_w(const MediaContentDescription* content,
-   const VideoContentDescription* video = content->as_video();
+@@ -1089,7 +1083,7 @@ bool VideoChannel::SetLocalContent_w(const MediaContentDescription* content,
+     SetNegotiatedHeaderExtensions_w(video->rtp_header_extensions());
  
    RtpHeaderExtensions rtp_header_extensions =
 -      GetFilteredRtpHeaderExtensions(video->rtp_header_extensions());
@@ -265,8 +546,8 @@ index f83f5cdd9a..29ea8e50fc 100644
    UpdateRtpHeaderExtensionMap(rtp_header_extensions);
    media_channel()->SetExtmapAllowMixed(video->extmap_allow_mixed());
  
-@@ -1072,7 +1068,7 @@ bool VideoChannel::SetRemoteContent_w(const MediaContentDescription* content,
-   const VideoContentDescription* video = content->as_video();
+@@ -1189,7 +1183,7 @@ bool VideoChannel::SetRemoteContent_w(const MediaContentDescription* content,
+     SetNegotiatedHeaderExtensions_w(video->rtp_header_extensions());
  
    RtpHeaderExtensions rtp_header_extensions =
 -      GetFilteredRtpHeaderExtensions(video->rtp_header_extensions());
@@ -274,7 +555,7 @@ index f83f5cdd9a..29ea8e50fc 100644
  
    VideoSendParameters send_params = last_send_params_;
    RtpSendParametersFromMediaDescription(
-@@ -1217,7 +1213,7 @@ bool RtpDataChannel::SetLocalContent_w(const MediaContentDescription* content,
+@@ -1345,7 +1339,7 @@ bool RtpDataChannel::SetLocalContent_w(const MediaContentDescription* content,
    const RtpDataContentDescription* data = content->as_rtp_data();
  
    RtpHeaderExtensions rtp_header_extensions =
@@ -283,23 +564,23 @@ index f83f5cdd9a..29ea8e50fc 100644
  
    DataRecvParameters recv_params = last_recv_params_;
    RtpParametersFromMediaDescription(
-@@ -1278,7 +1274,7 @@ bool RtpDataChannel::SetRemoteContent_w(const MediaContentDescription* content,
+@@ -1413,7 +1407,7 @@ bool RtpDataChannel::SetRemoteContent_w(const MediaContentDescription* content,
    }
  
    RtpHeaderExtensions rtp_header_extensions =
 -      GetFilteredRtpHeaderExtensions(data->rtp_header_extensions());
 +      GetDeduplicatedRtpHeaderExtensions(data->rtp_header_extensions());
  
-   RTC_LOG(LS_INFO) << "Setting remote data description";
+   RTC_LOG(LS_INFO) << "Setting remote data description for " << ToString();
    DataSendParameters send_params = last_send_params_;
 diff --git a/pc/channel.h b/pc/channel.h
-index 238a8e20fe..1fc51aa0df 100644
+index fe3778b6cd..ab8b9b8624 100644
 --- a/pc/channel.h
 +++ b/pc/channel.h
-@@ -250,10 +250,11 @@ class BaseChannel : public ChannelInterface,
-   virtual bool SetRemoteContent_w(const MediaContentDescription* content,
+@@ -274,10 +274,11 @@ class BaseChannel : public ChannelInterface,
                                    webrtc::SdpType type,
-                                   std::string* error_desc) = 0;
+                                   std::string* error_desc)
+       RTC_RUN_ON(worker_thread()) = 0;
 -  // Return a list of RTP header extensions with the non-encrypted extensions
 -  // removed depending on the current crypto_options_ and only if both the
 -  // non-encrypted and encrypted extension is present for the same URI.
@@ -312,74 +593,27 @@ index 238a8e20fe..1fc51aa0df 100644
        const RtpHeaderExtensions& extensions);
  
    // From MessageHandler
-diff --git a/pc/datagram_rtp_transport.cc b/pc/datagram_rtp_transport.cc
-index ad1e6dc995..06b13597b4 100644
---- a/pc/datagram_rtp_transport.cc
-+++ b/pc/datagram_rtp_transport.cc
-@@ -57,6 +57,7 @@ constexpr size_t kMaxRtcpFeedbackPacketSize = 1250;
- 
- DatagramRtpTransport::DatagramRtpTransport(
-     const std::vector<RtpExtension>& rtp_header_extensions,
-+    RtpExtension::Filter rtp_header_extensions_filter,
-     cricket::IceTransportInternal* ice_transport,
-     DatagramTransportInterface* datagram_transport)
-     : ice_transport_(ice_transport),
-@@ -66,8 +67,10 @@ DatagramRtpTransport::DatagramRtpTransport(
-   // Save extension map for parsing RTP packets (we only need transport
-   // sequence numbers).
-   const RtpExtension* transport_sequence_number_extension =
--      RtpExtension::FindHeaderExtensionByUri(rtp_header_extensions,
--                                             TransportSequenceNumber::kUri);
-+      RtpExtension::FindHeaderExtensionByUri(
-+        rtp_header_extensions,
-+        TransportSequenceNumber::kUri,
-+        rtp_header_extensions_filter);
- 
-   if (transport_sequence_number_extension != nullptr) {
-     rtp_header_extension_map_.Register<TransportSequenceNumber>(
-diff --git a/pc/datagram_rtp_transport.h b/pc/datagram_rtp_transport.h
-index f9684c69c0..4b388ec2e8 100644
---- a/pc/datagram_rtp_transport.h
-+++ b/pc/datagram_rtp_transport.h
-@@ -44,6 +44,7 @@ class DatagramRtpTransport : public RtpTransportInternal,
-  public:
-   DatagramRtpTransport(
-       const std::vector<webrtc::RtpExtension>& rtp_header_extensions,
-+      webrtc::RtpExtension::Filter rtp_header_extensions_filter,
-       cricket::IceTransportInternal* ice_transport,
-       DatagramTransportInterface* datagram_transport);
- 
 diff --git a/pc/jsep_transport_controller.cc b/pc/jsep_transport_controller.cc
-index 39451d5c06..dbe1640230 100644
+index 2784e80786..af3df17739 100644
 --- a/pc/jsep_transport_controller.cc
 +++ b/pc/jsep_transport_controller.cc
-@@ -1039,7 +1039,10 @@ int JsepTransportController::GetRtpAbsSendTimeHeaderExtensionId(
+@@ -912,7 +912,10 @@ int JsepTransportController::GetRtpAbsSendTimeHeaderExtensionId(
    const webrtc::RtpExtension* send_time_extension =
        webrtc::RtpExtension::FindHeaderExtensionByUri(
            content_desc->rtp_header_extensions(),
 -          webrtc::RtpExtension::kAbsSendTimeUri);
 +          webrtc::RtpExtension::kAbsSendTimeUri,
 +          config_.crypto_options.srtp.enable_encrypted_rtp_header_extensions
-+            ? webrtc::RtpExtension::kPreferEncryptedExtension
-+            : webrtc::RtpExtension::kDiscardEncryptedExtension);
++              ? webrtc::RtpExtension::kPreferEncryptedExtension
++              : webrtc::RtpExtension::kDiscardEncryptedExtension);
    return send_time_extension ? send_time_extension->id : -1;
  }
  
-@@ -1206,6 +1209,9 @@ RTCError JsepTransportController::MaybeCreateJsepTransport(
-     RTC_DCHECK(!rtcp_dtls_transport);
-     datagram_rtp_transport = std::make_unique<DatagramRtpTransport>(
-         content_info.media_description()->rtp_header_extensions(),
-+        config_.crypto_options.srtp.enable_encrypted_rtp_header_extensions
-+          ? RtpExtension::Filter::kPreferEncryptedExtension
-+          : RtpExtension::Filter::kDiscardEncryptedExtension,
-         ice->internal(), datagram_transport.get());
-   }
- 
 diff --git a/pc/media_session.cc b/pc/media_session.cc
-index a9c523d430..df27311bbd 100644
+index 6374f17be1..e159808ba3 100644
 --- a/pc/media_session.cc
 +++ b/pc/media_session.cc
-@@ -924,68 +924,6 @@ static Codecs MatchCodecPreference(
+@@ -988,68 +988,6 @@ static Codecs MatchCodecPreference(
    return filtered_codecs;
  }
  
@@ -448,7 +682,7 @@ index a9c523d430..df27311bbd 100644
  // Adds all extensions from |reference_extensions| to |offered_extensions| that
  // don't already exist in |offered_extensions| and ensure the IDs don't
  // collide. If an extension is added, it's also added to |regular_extensions| or
-@@ -1000,22 +938,25 @@ static void MergeRtpHdrExts(const RtpHeaderExtensions& reference_extensions,
+@@ -1064,22 +1002,28 @@ static void MergeRtpHdrExts(const RtpHeaderExtensions& reference_extensions,
                              RtpHeaderExtensions* encrypted_extensions,
                              UsedRtpHeaderExtensionIds* used_ids) {
    for (auto reference_extension : reference_extensions) {
@@ -456,14 +690,16 @@ index a9c523d430..df27311bbd 100644
 -                                nullptr)) {
 -      webrtc::RtpExtension existing;
 +    if (!webrtc::RtpExtension::FindHeaderExtensionByUriAndEncryption(
-+        *offered_extensions, reference_extension.uri, reference_extension.encrypt)) {
++            *offered_extensions, reference_extension.uri,
++            reference_extension.encrypt)) {
        if (reference_extension.encrypt) {
 -        if (FindByUriAndEncryption(*encrypted_extensions, reference_extension,
 -                                   &existing)) {
 -          offered_extensions->push_back(existing);
 +        const webrtc::RtpExtension* existing =
-+          webrtc::RtpExtension::FindHeaderExtensionByUriAndEncryption(
-+            *encrypted_extensions, reference_extension.uri, reference_extension.encrypt);
++            webrtc::RtpExtension::FindHeaderExtensionByUriAndEncryption(
++                *encrypted_extensions, reference_extension.uri,
++                reference_extension.encrypt);
 +        if (existing) {
 +          offered_extensions->push_back(*existing);
          } else {
@@ -476,22 +712,21 @@ index a9c523d430..df27311bbd 100644
 -                                   &existing)) {
 -          offered_extensions->push_back(existing);
 +        const webrtc::RtpExtension* existing =
-+          webrtc::RtpExtension::FindHeaderExtensionByUriAndEncryption(
-+            *regular_extensions, reference_extension.uri, reference_extension.encrypt);
++            webrtc::RtpExtension::FindHeaderExtensionByUriAndEncryption(
++                *regular_extensions, reference_extension.uri,
++                reference_extension.encrypt);
 +        if (existing) {
 +          offered_extensions->push_back(*existing);
          } else {
            used_ids->FindAndSetIdUsed(&reference_extension);
            regular_extensions->push_back(reference_extension);
-@@ -1026,41 +967,60 @@ static void MergeRtpHdrExts(const RtpHeaderExtensions& reference_extensions,
+@@ -1090,41 +1034,86 @@ static void MergeRtpHdrExts(const RtpHeaderExtensions& reference_extensions,
    }
  }
  
 -static void AddEncryptedVersionsOfHdrExts(RtpHeaderExtensions* extensions,
 -                                          RtpHeaderExtensions* all_extensions,
-+static void AddEncryptedVersionsOfHdrExts(RtpHeaderExtensions* offered_extensions,
-+                                          RtpHeaderExtensions* encrypted_extensions,
-                                           UsedRtpHeaderExtensionIds* used_ids) {
+-                                          UsedRtpHeaderExtensionIds* used_ids) {
 -  RtpHeaderExtensions encrypted_extensions;
 -  for (const webrtc::RtpExtension& extension : *extensions) {
 -    webrtc::RtpExtension existing;
@@ -503,6 +738,10 @@ index a9c523d430..df27311bbd 100644
 -        (FindByUriWithEncryptionPreference(*extensions, extension.uri, true,
 -                                           &existing) &&
 -         existing.encrypt)) {
++static void AddEncryptedVersionsOfHdrExts(
++    RtpHeaderExtensions* offered_extensions,
++    RtpHeaderExtensions* encrypted_extensions,
++    UsedRtpHeaderExtensionIds* used_ids) {
 +  RtpHeaderExtensions encrypted_extensions_to_add;
 +  for (const auto& extension : *offered_extensions) {
 +    // Skip existing encrypted offered extension
@@ -526,21 +765,21 @@ index a9c523d430..df27311bbd 100644
 +    // Skip if an encrypted extension with that URI already exists in the
 +    // offered extensions.
 +    const bool have_encrypted_extension =
-+      webrtc::RtpExtension::FindHeaderExtensionByUriAndEncryption(
-+        *offered_extensions, extension.uri, true);
++        webrtc::RtpExtension::FindHeaderExtensionByUriAndEncryption(
++            *offered_extensions, extension.uri, true);
 +    if (have_encrypted_extension) {
 +      continue;
-+    }
+     }
 +
 +    // Determine if a shared encrypted extension with that URI already exists.
 +    const webrtc::RtpExtension* shared_encrypted_extension =
-+      webrtc::RtpExtension::FindHeaderExtensionByUriAndEncryption(
-+        *encrypted_extensions, extension.uri, true);
++        webrtc::RtpExtension::FindHeaderExtensionByUriAndEncryption(
++            *encrypted_extensions, extension.uri, true);
 +    if (shared_encrypted_extension) {
 +      // Re-use the shared encrypted extension
 +      encrypted_extensions_to_add.push_back(*shared_encrypted_extension);
 +      continue;
-     }
++    }
 +
 +    // None exists. Create a new shared encrypted extension from the
 +    // non-encrypted one.
@@ -554,10 +793,35 @@ index a9c523d430..df27311bbd 100644
 -                     encrypted_extensions.end());
 +
 +  // Append the additional encrypted extensions to be offered
-+  offered_extensions->insert(
-+    offered_extensions->end(),
-+    encrypted_extensions_to_add.begin(),
-+    encrypted_extensions_to_add.end());
++  offered_extensions->insert(offered_extensions->end(),
++                             encrypted_extensions_to_add.begin(),
++                             encrypted_extensions_to_add.end());
++}
++
++// Mostly identical to RtpExtension::FindHeaderExtensionByUri but discards any
++// encrypted extensions that this implementation cannot encrypt.
++static const webrtc::RtpExtension* FindHeaderExtensionByUriDiscardUnsupported(
++    const std::vector<webrtc::RtpExtension>& extensions,
++    absl::string_view uri,
++    webrtc::RtpExtension::Filter filter) {
++  // Note: While it's technically possible to decrypt extensions that we don't
++  // encrypt, the symmetric API of libsrtp does not allow us to supply
++  // different IDs for encryption/decryption of header extensions depending on
++  // whether the packet is inbound or outbound. Thereby, we are limited to
++  // what we can send in encrypted form.
++  if (!webrtc::RtpExtension::IsEncryptionSupported(uri)) {
++    // If there's no encryption support and we only want encrypted extensions,
++    // there's no point in continuing the search here.
++    if (filter == webrtc::RtpExtension::kRequireEncryptedExtension) {
++      return nullptr;
++    }
++
++    // Instruct to only return non-encrypted extensions
++    filter = webrtc::RtpExtension::Filter::kDiscardEncryptedExtension;
++  }
++
++  return webrtc::RtpExtension::FindHeaderExtensionByUri(extensions, uri,
++                                                        filter);
  }
  
  static void NegotiateRtpHeaderExtensions(
@@ -568,16 +832,19 @@ index a9c523d430..df27311bbd 100644
      RtpHeaderExtensions* negotiated_extensions) {
    // TransportSequenceNumberV2 is not offered by default. The special logic for
    // the TransportSequenceNumber extensions works as follows:
-@@ -1071,7 +1031,7 @@ static void NegotiateRtpHeaderExtensions(
+@@ -1133,9 +1122,9 @@ static void NegotiateRtpHeaderExtensions(
+   // V1 and V2   V2 regardless of local_extensions.
+   // V2          V2 regardless of local_extensions.
    const webrtc::RtpExtension* transport_sequence_number_v2_offer =
-       webrtc::RtpExtension::FindHeaderExtensionByUri(
+-      webrtc::RtpExtension::FindHeaderExtensionByUri(
++      FindHeaderExtensionByUriDiscardUnsupported(
            offered_extensions,
 -          webrtc::RtpExtension::kTransportSequenceNumberV2Uri);
 +          webrtc::RtpExtension::kTransportSequenceNumberV2Uri, filter);
  
    bool frame_descriptor_in_local = false;
    bool dependency_descriptor_in_local = false;
-@@ -1084,10 +1044,9 @@ static void NegotiateRtpHeaderExtensions(
+@@ -1148,10 +1137,10 @@ static void NegotiateRtpHeaderExtensions(
        dependency_descriptor_in_local = true;
      else if (ours.uri == webrtc::RtpExtension::kAbsoluteCaptureTimeUri)
        abs_capture_time_in_local = true;
@@ -585,13 +852,14 @@ index a9c523d430..df27311bbd 100644
 -    if (FindByUriWithEncryptionPreference(
 -            offered_extensions, ours.uri,
 -            enable_encrypted_rtp_header_extensions, &theirs)) {
-+    const webrtc::RtpExtension* theirs = webrtc::RtpExtension::FindHeaderExtensionByUri(
-+      offered_extensions, ours.uri, filter);
++    const webrtc::RtpExtension* theirs =
++        FindHeaderExtensionByUriDiscardUnsupported(offered_extensions, ours.uri,
++                                                   filter);
 +    if (theirs) {
        if (transport_sequence_number_v2_offer &&
            ours.uri == webrtc::RtpExtension::kTransportSequenceNumberUri) {
          // Don't respond to
-@@ -1097,7 +1056,7 @@ static void NegotiateRtpHeaderExtensions(
+@@ -1161,7 +1150,7 @@ static void NegotiateRtpHeaderExtensions(
          continue;
        } else {
          // We respond with their RTP header extension id.
@@ -600,7 +868,7 @@ index a9c523d430..df27311bbd 100644
        }
      }
    }
-@@ -1109,28 +1068,38 @@ static void NegotiateRtpHeaderExtensions(
+@@ -1173,28 +1162,35 @@ static void NegotiateRtpHeaderExtensions(
  
    // Frame descriptors support. If the extension is not present locally, but is
    // in the offer, we add it to the list.
@@ -619,20 +887,18 @@ index a9c523d430..df27311bbd 100644
 -    negotiated_extensions->push_back(theirs);
 +  if (!dependency_descriptor_in_local) {
 +    const webrtc::RtpExtension* theirs =
-+      webrtc::RtpExtension::FindHeaderExtensionByUri(
-+        offered_extensions,
-+        webrtc::RtpExtension::kDependencyDescriptorUri,
-+        filter);
++        FindHeaderExtensionByUriDiscardUnsupported(
++            offered_extensions, webrtc::RtpExtension::kDependencyDescriptorUri,
++            filter);
 +    if (theirs) {
 +      negotiated_extensions->push_back(*theirs);
 +    }
 +  }
 +  if (!frame_descriptor_in_local) {
 +    const webrtc::RtpExtension* theirs =
-+      webrtc::RtpExtension::FindHeaderExtensionByUri(
-+        offered_extensions,
-+        webrtc::RtpExtension::kGenericFrameDescriptorUri00,
-+        filter);
++        FindHeaderExtensionByUriDiscardUnsupported(
++            offered_extensions,
++            webrtc::RtpExtension::kGenericFrameDescriptorUri00, filter);
 +    if (theirs) {
 +      negotiated_extensions->push_back(*theirs);
 +    }
@@ -647,37 +913,116 @@ index a9c523d430..df27311bbd 100644
 -    negotiated_extensions->push_back(theirs);
 +  if (!abs_capture_time_in_local) {
 +    const webrtc::RtpExtension* theirs =
-+      webrtc::RtpExtension::FindHeaderExtensionByUri(
-+        offered_extensions,
-+        webrtc::RtpExtension::kAbsoluteCaptureTimeUri,
-+        filter);
++        FindHeaderExtensionByUriDiscardUnsupported(
++            offered_extensions, webrtc::RtpExtension::kAbsoluteCaptureTimeUri,
++            filter);
 +    if (theirs) {
 +      negotiated_extensions->push_back(*theirs);
 +    }
    }
  }
  
-@@ -1185,10 +1154,14 @@ static bool CreateMediaContentAnswer(
+@@ -1249,10 +1245,14 @@ static bool CreateMediaContentAnswer(
      bool bundle_enabled,
      MediaContentDescription* answer) {
    answer->set_extmap_allow_mixed_enum(offer->extmap_allow_mixed_enum());
 +  const webrtc::RtpExtension::Filter extensions_filter =
-+    enable_encrypted_rtp_header_extensions
-+      ? webrtc::RtpExtension::Filter::kPreferEncryptedExtension
-+      : webrtc::RtpExtension::Filter::kDiscardEncryptedExtension;
++      enable_encrypted_rtp_header_extensions
++          ? webrtc::RtpExtension::Filter::kPreferEncryptedExtension
++          : webrtc::RtpExtension::Filter::kDiscardEncryptedExtension;
    RtpHeaderExtensions negotiated_rtp_extensions;
-   NegotiateRtpHeaderExtensions(
-       local_rtp_extenstions, offer->rtp_header_extensions(),
+-  NegotiateRtpHeaderExtensions(
+-      local_rtp_extensions, offer->rtp_header_extensions(),
 -      enable_encrypted_rtp_header_extensions, &negotiated_rtp_extensions);
-+      extensions_filter, &negotiated_rtp_extensions);
++  NegotiateRtpHeaderExtensions(local_rtp_extensions,
++                               offer->rtp_header_extensions(),
++                               extensions_filter, &negotiated_rtp_extensions);
    answer->set_rtp_header_extensions(negotiated_rtp_extensions);
  
    answer->set_rtcp_mux(session_options.rtcp_mux_enabled && offer->rtcp_mux());
-diff --git a/pc/peer_connection.cc b/pc/peer_connection.cc
-index 05e7b95591..b68f328f92 100644
---- a/pc/peer_connection.cc
-+++ b/pc/peer_connection.cc
-@@ -3688,13 +3688,19 @@ static RTCError UpdateSimulcastLayerStatusInSender(
+diff --git a/pc/media_session_unittest.cc b/pc/media_session_unittest.cc
+index 940d746e5f..745e9e495a 100644
+--- a/pc/media_session_unittest.cc
++++ b/pc/media_session_unittest.cc
+@@ -151,6 +151,7 @@ static const RtpExtension kAudioRtpExtensionEncrypted1[] = {
+     RtpExtension("urn:ietf:params:rtp-hdrext:ssrc-audio-level", 8),
+     RtpExtension("http://google.com/testing/audio_something", 10),
+     RtpExtension("urn:ietf:params:rtp-hdrext:ssrc-audio-level", 12, true),
++    RtpExtension("http://google.com/testing/audio_something", 11, true),
+ };
+ 
+ static const RtpExtension kAudioRtpExtension2[] = {
+@@ -173,7 +174,15 @@ static const RtpExtension kAudioRtpExtension3ForEncryption[] = {
+ static const RtpExtension kAudioRtpExtension3ForEncryptionOffer[] = {
+     RtpExtension("http://google.com/testing/audio_something", 2),
+     RtpExtension("urn:ietf:params:rtp-hdrext:toffset", 3),
+-    RtpExtension("urn:ietf:params:rtp-hdrext:toffset", 14, true),
++    RtpExtension("http://google.com/testing/audio_something", 14, true),
++    RtpExtension("urn:ietf:params:rtp-hdrext:toffset", 13, true),
++};
++
++static const RtpExtension kVideoRtpExtension3ForEncryptionOffer[] = {
++    RtpExtension("http://google.com/testing/video_something", 4),
++    RtpExtension("urn:ietf:params:rtp-hdrext:toffset", 3),
++    RtpExtension("http://google.com/testing/video_something", 12, true),
++    RtpExtension("urn:ietf:params:rtp-hdrext:toffset", 13, true),
+ };
+ 
+ static const RtpExtension kAudioRtpExtensionAnswer[] = {
+@@ -192,7 +201,8 @@ static const RtpExtension kVideoRtpExtension1[] = {
+ static const RtpExtension kVideoRtpExtensionEncrypted1[] = {
+     RtpExtension("urn:ietf:params:rtp-hdrext:toffset", 14),
+     RtpExtension("http://google.com/testing/video_something", 13),
+-    RtpExtension("urn:ietf:params:rtp-hdrext:toffset", 11, true),
++    RtpExtension("urn:ietf:params:rtp-hdrext:toffset", 9, true),
++    RtpExtension("http://google.com/testing/video_something", 7, true),
+ };
+ 
+ static const RtpExtension kVideoRtpExtension2[] = {
+@@ -217,7 +227,7 @@ static const RtpExtension kVideoRtpExtensionAnswer[] = {
+ };
+ 
+ static const RtpExtension kVideoRtpExtensionEncryptedAnswer[] = {
+-    RtpExtension("urn:ietf:params:rtp-hdrext:toffset", 11, true),
++    RtpExtension("urn:ietf:params:rtp-hdrext:toffset", 9, true),
+ };
+ 
+ static const RtpExtension kRtpExtensionTransportSequenceNumber01[] = {
+@@ -3698,19 +3708,11 @@ TEST_F(MediaSessionDescriptionFactoryTest, RtpExtensionIdReusedEncrypted) {
+       MAKE_VECTOR(kVideoRtpExtension3ForEncryption), &opts);
+   std::unique_ptr<SessionDescription> offer = f1_.CreateOffer(opts, NULL);
+ 
+-  // The extensions that are shared between audio and video should use the same
+-  // id.
+-  const RtpExtension kExpectedVideoRtpExtension[] = {
+-      kVideoRtpExtension3ForEncryption[0],
+-      kAudioRtpExtension3ForEncryptionOffer[1],
+-      kAudioRtpExtension3ForEncryptionOffer[2],
+-  };
+-
+   EXPECT_EQ(
+       MAKE_VECTOR(kAudioRtpExtension3ForEncryptionOffer),
+       GetFirstAudioContentDescription(offer.get())->rtp_header_extensions());
+   EXPECT_EQ(
+-      MAKE_VECTOR(kExpectedVideoRtpExtension),
++      MAKE_VECTOR(kVideoRtpExtension3ForEncryptionOffer),
+       GetFirstVideoContentDescription(offer.get())->rtp_header_extensions());
+ 
+   // Nothing should change when creating a new offer
+@@ -3720,7 +3722,7 @@ TEST_F(MediaSessionDescriptionFactoryTest, RtpExtensionIdReusedEncrypted) {
+   EXPECT_EQ(MAKE_VECTOR(kAudioRtpExtension3ForEncryptionOffer),
+             GetFirstAudioContentDescription(updated_offer.get())
+                 ->rtp_header_extensions());
+-  EXPECT_EQ(MAKE_VECTOR(kExpectedVideoRtpExtension),
++  EXPECT_EQ(MAKE_VECTOR(kVideoRtpExtension3ForEncryptionOffer),
+             GetFirstVideoContentDescription(updated_offer.get())
+                 ->rtp_header_extensions());
+ }
+diff --git a/pc/sdp_offer_answer.cc b/pc/sdp_offer_answer.cc
+index 3499e4c432..a2a305e001 100644
+--- a/pc/sdp_offer_answer.cc
++++ b/pc/sdp_offer_answer.cc
+@@ -529,13 +529,17 @@ static RTCError UpdateSimulcastLayerStatusInSender(
  
  static bool SimulcastIsRejected(
      const ContentInfo* local_content,
@@ -690,118 +1035,53 @@ index 05e7b95591..b68f328f92 100644
    bool simulcast_answered = answer_media_desc.HasSimulcast();
    bool rids_supported = RtpExtension::FindHeaderExtensionByUri(
 -      answer_media_desc.rtp_header_extensions(), RtpExtension::kRidUri);
-+      answer_media_desc.rtp_header_extensions(),
-+      RtpExtension::kRidUri,
++      answer_media_desc.rtp_header_extensions(), RtpExtension::kRidUri,
 +      enable_encrypted_rtp_header_extensions
-+        ? RtpExtension::Filter::kPreferEncryptedExtension
-+        : RtpExtension::Filter::kDiscardEncryptedExtension
-+    );
++          ? RtpExtension::Filter::kPreferEncryptedExtension
++          : RtpExtension::Filter::kDiscardEncryptedExtension);
    return simulcast_offered && (!simulcast_answered || !rids_supported);
  }
  
-@@ -3796,7 +3802,11 @@ PeerConnection::AssociateTransceiver(cricket::ContentSource source,
-     }
+@@ -3296,7 +3300,9 @@ SdpOfferAnswerHandler::AssociateTransceiver(
+ 
      // Check if the offer indicated simulcast but the answer rejected it.
      // This can happen when simulcast is not supported on the remote party.
 -    if (SimulcastIsRejected(old_local_content, *media_desc)) {
-+
-+    if (SimulcastIsRejected(
-+        old_local_content,
-+        *media_desc,
-+        GetCryptoOptions().srtp.enable_encrypted_rtp_header_extensions)) {
++    if (SimulcastIsRejected(old_local_content, *media_desc,
++                            pc_->GetCryptoOptions()
++                                .srtp.enable_encrypted_rtp_header_extensions)) {
        RTC_HISTOGRAM_BOOLEAN(kSimulcastDisabled, true);
        RTCError error =
            DisableSimulcastInSender(transceiver->internal()->sender_internal());
 diff --git a/pc/session_description.h b/pc/session_description.h
-index bfd19b8c7a..7dcc194d36 100644
+index dacf1a2174..dde404956d 100644
 --- a/pc/session_description.h
 +++ b/pc/session_description.h
-@@ -135,6 +135,9 @@ class MediaContentDescription {
+@@ -150,6 +150,11 @@ class MediaContentDescription {
      cryptos_ = cryptos;
    }
  
-+  // List of RTP header extensions. URIs are **NOT** guaranteed to be unique.
++  // List of RTP header extensions. URIs are **NOT** guaranteed to be unique
++  // as they can appear twice when both encrypted and non-encrypted extensions
++  // are present.
 +  // Use RtpExtension::FindHeaderExtensionByUri for finding and
 +  // RtpExtension::DeduplicateHeaderExtensions for filtering.
    virtual const RtpHeaderExtensions& rtp_header_extensions() const {
      return rtp_header_extensions_;
    }
-diff --git a/pc/webrtc_sdp.cc b/pc/webrtc_sdp.cc
-index f77327faf1..f5716a5aa6 100644
---- a/pc/webrtc_sdp.cc
-+++ b/pc/webrtc_sdp.cc
-@@ -343,7 +343,7 @@ static bool ParseIceOptions(const std::string& line,
-                             std::vector<std::string>* transport_options,
-                             SdpParseError* error);
- static bool ParseExtmap(const std::string& line,
--                        RtpExtension* extmap,
-+                        absl::optional<RtpExtension>& extmap,
-                         SdpParseError* error);
- static bool ParseFingerprintAttribute(
-     const std::string& line,
-@@ -1282,7 +1282,7 @@ bool ParseSctpMaxMessageSize(const std::string& line,
- }
- 
- bool ParseExtmap(const std::string& line,
--                 RtpExtension* extmap,
-+                 absl::optional<RtpExtension>& extmap,
-                  SdpParseError* error) {
-   // RFC 5285
-   // a=extmap:<value>["/"<direction>] <URI> <extensionattributes>
-@@ -1321,9 +1321,21 @@ bool ParseExtmap(const std::string& line,
-     if (uri == RtpExtension::kEncryptHeaderExtensionsUri) {
-       return ParseFailed(line, "Recursive encrypted header.", error);
-     }
-+
-+    // Filter encrypted extensions that we cannot encrypt.
-+    // Note: While it's technically possible to decrypt such extensions, the
-+    // symmetric API of libsrtp does not allow us to supply different IDs for
-+    // encryption/decryption of header extensions depending on whether the
-+    // packet is inbound or outbound. Thereby, we are limited to what we can
-+    // send in encrypted form.
-+    if (!RtpExtension::IsEncryptionSupported(uri)) {
-+      RTC_LOG(LS_INFO) << "Discarded RTP header extension that we cannot "
-+                       << "encrypt: " << uri;
-+      return true;
-+    }
+diff --git a/video/video_send_stream.cc b/video/video_send_stream.cc
+index 91c246c66e..087ac3cb99 100644
+--- a/video/video_send_stream.cc
++++ b/video/video_send_stream.cc
+@@ -65,7 +65,10 @@ VideoStreamEncoder::BitrateAllocationCallbackType
+ GetBitrateAllocationCallbackType(const VideoSendStream::Config& config) {
+   if (webrtc::RtpExtension::FindHeaderExtensionByUri(
+           config.rtp.extensions,
+-          webrtc::RtpExtension::kVideoLayersAllocationUri)) {
++          webrtc::RtpExtension::kVideoLayersAllocationUri,
++          config.crypto_options.srtp.enable_encrypted_rtp_header_extensions
++              ? RtpExtension::Filter::kPreferEncryptedExtension
++              : RtpExtension::Filter::kDiscardEncryptedExtension)) {
+     return VideoStreamEncoder::BitrateAllocationCallbackType::
+         kVideoLayersAllocation;
    }
- 
--  *extmap = RtpExtension(uri, value, encrypted);
-+  extmap.emplace(RtpExtension(uri, value, encrypted));
-   return true;
- }
- 
-@@ -2283,11 +2295,13 @@ bool ParseSessionDescription(const std::string& message,
-     } else if (HasAttribute(line, kAttributeExtmapAllowMixed)) {
-       desc->set_extmap_allow_mixed(true);
-     } else if (HasAttribute(line, kAttributeExtmap)) {
--      RtpExtension extmap;
--      if (!ParseExtmap(line, &extmap, error)) {
-+      absl::optional<RtpExtension> extmap = absl::nullopt;
-+      if (!ParseExtmap(line, extmap, error)) {
-         return false;
-       }
--      session_extmaps->push_back(extmap);
-+      if (extmap.has_value()) {
-+        session_extmaps->push_back(*extmap);
-+      }
-     }
-   }
- 
-@@ -3248,11 +3262,13 @@ bool ParseContent(const std::string& message,
-         media_desc->set_extmap_allow_mixed_enum(
-             MediaContentDescription::kMedia);
-       } else if (HasAttribute(line, kAttributeExtmap)) {
--        RtpExtension extmap;
--        if (!ParseExtmap(line, &extmap, error)) {
-+        absl::optional<RtpExtension> extmap;
-+        if (!ParseExtmap(line, extmap, error)) {
-           return false;
-         }
--        media_desc->AddRtpHeaderExtension(extmap);
-+        if (extmap.has_value()) {
-+          media_desc->AddRtpHeaderExtension(*extmap);
-+        }
-       } else if (HasAttribute(line, kAttributeXGoogleFlag)) {
-         // Experimental attribute.  Conference mode activates more aggressive
-         // AEC and NS settings.

@@ -6,7 +6,7 @@ index 8270367970..364f8e4de4 100644
    private final VideoReader videoReader;
    private CapturerObserver capturerObserver;
    private final Timer timer = new Timer();
-+  private boolean isCapturing = false;
++  private boolean isCapturing;
  
    private final TimerTask tickTask = new TimerTask() {
      @Override
