@@ -40,7 +40,7 @@ Then, fetch the libwebrtc code into the `webrtc` directory. This will download
 Optionally switch to a specific (release) branch:
 
     cd webrtc/src
-    git checkout branch-head/<revision>
+    git checkout branch-heads/<revision>
     cd -
 
 You can find the corresponding branch head revisions for libwebrtc releases at
