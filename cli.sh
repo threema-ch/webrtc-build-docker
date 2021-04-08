@@ -132,10 +132,13 @@ case ${1-} in
         pattern=${2-*.patch}
         cd webrtc/src
         shopt -s nullglob
+        patch_count=0
         for patch in ../../patches/${pattern}; do
             echo "Applying ${patch}..."
             git apply ${patch}
+            patch_count=$((patch_count+1))
         done
+        echo "Applied ${patch_count} patches"
         cd ../../
 
         # Log patches
