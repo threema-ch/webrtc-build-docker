@@ -105,16 +105,17 @@ index 3243418e35..056a2ba9ff 100644
    if (audio_red_for_opus_trial_enabled_) {
      // Loop through the codecs to find the RED codec that matches opus
 diff --git a/sdk/android/api/org/webrtc/RtpSender.java b/sdk/android/api/org/webrtc/RtpSender.java
-index bc894e5d04..e60fed7419 100644
+index bc894e5d04..c1290bf882 100644
 --- a/sdk/android/api/org/webrtc/RtpSender.java
 +++ b/sdk/android/api/org/webrtc/RtpSender.java
-@@ -26,9 +26,6 @@ public class RtpSender {
+@@ -26,9 +26,7 @@ public class RtpSender {
      this.nativeRtpSender = nativeRtpSender;
      long nativeTrack = nativeGetTrack(nativeRtpSender);
      cachedTrack = MediaStreamTrack.createMediaStreamTrack(nativeTrack);
 -
 -    long nativeDtmfSender = nativeGetDtmfSender(nativeRtpSender);
 -    dtmfSender = (nativeDtmfSender != 0) ? new DtmfSender(nativeDtmfSender) : null;
++    dtmfSender = null;
    }
  
    /**
