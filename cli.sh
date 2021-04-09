@@ -9,8 +9,8 @@ function print_usage {
     echo "  clean"
     echo "  build-tools"
     echo ""
-    echo "  fetch [<flags>]"
-    echo "  update [<flags>]"
+    echo "  fetch [<revision>]"
+    echo "  update"
     echo "  patch"
     echo "  build <${TARGETS}>"
     echo "  build-all"
@@ -87,10 +87,13 @@ case ${1-} in
         
         # Fetch sources
         mkdir webrtc
+        revision=${2:-master}
         docker run -it -v ${PWD}/webrtc:/webrtc threema/webrtc-build-tools:latest bash -c "
             set -euo pipefail
             echo 'Fetching source files'
             fetch webrtc_android
+            echo 'Checking out revision $revision'
+            cd src && git checkout $revision && cd -
             echo 'Updating third party repos and running pre-compile hooks'
             gclient sync
         "
