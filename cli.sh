@@ -143,7 +143,7 @@ case ${1-} in
 
         # Log patches
         mkdir -p out/
-        ls -la patches/${pattern} > out/patches.txt
+        ls -noa --time-style=long-iso patches/${pattern} > out/patches.txt
         ;;
 
     build)
