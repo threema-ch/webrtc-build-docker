@@ -104,3 +104,34 @@ index 3243418e35..056a2ba9ff 100644
  
    if (audio_red_for_opus_trial_enabled_) {
      // Loop through the codecs to find the RED codec that matches opus
+diff --git a/sdk/android/api/org/webrtc/RtpSender.java b/sdk/android/api/org/webrtc/RtpSender.java
+index bc894e5d04..e60fed7419 100644
+--- a/sdk/android/api/org/webrtc/RtpSender.java
++++ b/sdk/android/api/org/webrtc/RtpSender.java
+@@ -26,9 +26,6 @@ public class RtpSender {
+     this.nativeRtpSender = nativeRtpSender;
+     long nativeTrack = nativeGetTrack(nativeRtpSender);
+     cachedTrack = MediaStreamTrack.createMediaStreamTrack(nativeTrack);
+-
+-    long nativeDtmfSender = nativeGetDtmfSender(nativeRtpSender);
+-    dtmfSender = (nativeDtmfSender != 0) ? new DtmfSender(nativeDtmfSender) : null;
+   }
+ 
+   /**
+diff --git a/sdk/objc/api/peerconnection/RTCRtpSender.mm b/sdk/objc/api/peerconnection/RTCRtpSender.mm
+index 1ca9360ab8..bc1b201bcd 100644
+--- a/sdk/objc/api/peerconnection/RTCRtpSender.mm
++++ b/sdk/objc/api/peerconnection/RTCRtpSender.mm
+@@ -116,12 +116,6 @@
+   if (self = [super init]) {
+     _factory = factory;
+     _nativeRtpSender = nativeRtpSender;
+-    rtc::scoped_refptr<webrtc::DtmfSenderInterface> nativeDtmfSender(
+-        _nativeRtpSender->GetDtmfSender());
+-    if (nativeDtmfSender) {
+-      _dtmfSender =
+-          [[RTC_OBJC_TYPE(RTCDtmfSender) alloc] initWithNativeDtmfSender:nativeDtmfSender];
+-    }
+     RTCLogInfo(@"RTC_OBJC_TYPE(RTCRtpSender)(%p): created sender: %@", self, self.description);
+   }
+   return self;
