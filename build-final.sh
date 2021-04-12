@@ -18,7 +18,6 @@ docker run --rm -ti -v "$(pwd)/out:/out" -v "$(pwd)/patches:/patches" \
     set -euo pipefail
     shopt -s nullglob
 
-    export GYP_DEFINES='OS=android'
     export WEBRTC_COMPILE_ARGS='$BUILD_ARGS'
     export OUT='/out'
 
@@ -35,7 +34,6 @@ docker run --rm -ti -v "$(pwd)/out:/out" -v "$(pwd)/patches:/patches" \
     echo '==> Log revision and build args'
     git log --pretty=fuller HEAD...HEAD^ > \$OUT/revision.txt
     echo \"WEBRTC_COMPILE_ARGS: \$WEBRTC_COMPILE_ARGS\" >> \$OUT/build_args.txt
-    echo \"GYP_DEFINES: \$GYP_DEFINES\" >> \$OUT/build_args.txt
 
     echo '==> Apply patches'
     for p in /patches/*.patch; do echo \"Applying \$p...\"; git apply \$p; done 
