@@ -36,6 +36,9 @@ RUN git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_t
     chown -R $UID:$GID /opt/depot_tools
 ENV PATH /opt/depot_tools:$PATH
 
+# Create workdir
+RUN mkdir /webrtc && chown $UID:$GID /webrtc
+
 # Setup CCache
 ENV CCACHE_DIR /webrtc/.ccache
 ENV CCACHE_BASEDIR /webrtc/src
