@@ -49,7 +49,7 @@ docker run --rm -ti -v "$(pwd)/out:/out" -v "$(pwd)/patches:/patches" \
         bash -c \"source build/android/envsetup.sh && autoninja -C out/\$target webrtc\"
 
         mkdir -p \$OUT/\$target/
-        cp out/arm/libjingle_peerconnection_so.so \$OUT/\$target/
+        cp out/\$target/libjingle_peerconnection_so.so \$OUT/\$target/
     done
     cp out/arm64/lib.java/sdk/android/libwebrtc.jar \$OUT/
 
