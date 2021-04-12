@@ -10,7 +10,7 @@ the resulting build into your application.**
 
 ## TL;DR
 
-For an initial build:
+For an initial local build:
 
     ./cli.sh build-tools
     ./cli.sh fetch
@@ -23,7 +23,12 @@ For subsequent builds after an update:
     ./cli.sh patch
     ./cli.sh build-all
 
-## Usage
+For a (somewhat) reproducible build, created from within a temporary Docker container:
+
+    ./cli.sh build-tools
+    ./build-final.sh <revision>
+
+## Usage: cli.sh
 
 First, build the tools image:
 
@@ -84,6 +89,22 @@ tools need updating or that the code needs to be fetched again. To clean and
 start from scratch, run:
 
     ./cli.sh clean
+
+## Usage: build-final.sh
+
+To generate a (somewhat) reproducible build, without any caching and with the
+whole process being done from within a temporary, deterministic Docker
+container:
+
+    ./cli.sh build-tools
+    ./build-final.sh <revision>
+
+This guarantees the absence of a cache (because it always fetches fresh code),
+consistent permissions and filesystem paths (so that your username and workdir
+isn't included in the binary's debug info) and will ensure that you don't
+forget to apply patches (because it always applies all patches at
+`patches/*.patch`).
+
 
 ## Patches
 
