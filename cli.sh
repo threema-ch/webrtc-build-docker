@@ -87,7 +87,7 @@ case ${1-} in
         
         # Fetch sources
         mkdir webrtc
-        revision=${2:-master}
+        revision=${2:-main}
         docker run -it -v ${PWD}/webrtc:/webrtc threema/webrtc-build-tools:latest bash -c "
             set -euo pipefail
             echo 'Fetching source files'
