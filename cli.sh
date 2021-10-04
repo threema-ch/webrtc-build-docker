@@ -63,7 +63,7 @@ function after_build_common {
 case ${1-} in
     clean)
         echo "Removing built files"
-        rm -r out
+        rm -rf out
         echo "Removing tools image"
         docker rmi threema/webrtc-build-tools:latest || true
         echo "Removing source files"
