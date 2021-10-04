@@ -1,0 +1,62 @@
+commit 19214818d79b9461b9e6dcbed3af35b56a64ec4a
+Author: Nico Weber <thakis@chromium.org>
+Date:   Sat Aug 14 23:07:06 2021 -0400
+
+    Fix some -Wunreachable-code-aggressive warnings
+    
+    Bug: chromium:1066980
+    Change-Id: I24fea094f28577799c5fcbcf2e9657ffa9bfd076
+    Reviewed-on: https://webrtc-review.googlesource.com/c/src/+/228760
+    Reviewed-by: Jamie Walch <jamiewalch@chromium.org>
+    Reviewed-by: Tommi <tommi@webrtc.org>
+    Commit-Queue: Tommi <tommi@webrtc.org>
+    Cr-Commit-Position: refs/heads/master@{#34766}
+
+diff --git a/modules/audio_processing/aec3/aec3_common.cc b/modules/audio_processing/aec3/aec3_common.cc
+index 7bd8d6267a..3ba10d5baf 100644
+--- a/modules/audio_processing/aec3/aec3_common.cc
++++ b/modules/audio_processing/aec3/aec3_common.cc
+@@ -29,9 +29,9 @@ Aec3Optimization DetectOptimization() {
+ 
+ #if defined(WEBRTC_HAS_NEON)
+   return Aec3Optimization::kNeon;
+-#endif
+-
++#else
+   return Aec3Optimization::kNone;
++#endif
+ }
+ 
+ float FastApproxLog2f(const float in) {
+diff --git a/modules/desktop_capture/screen_capturer_linux.cc b/modules/desktop_capture/screen_capturer_linux.cc
+index ed48b7d6d5..6cad2acd64 100644
+--- a/modules/desktop_capture/screen_capturer_linux.cc
++++ b/modules/desktop_capture/screen_capturer_linux.cc
+@@ -34,9 +34,9 @@ std::unique_ptr<DesktopCapturer> DesktopCapturer::CreateRawScreenCapturer(
+ 
+ #if defined(WEBRTC_USE_X11)
+   return ScreenCapturerX11::CreateRawScreenCapturer(options);
+-#endif  // defined(WEBRTC_USE_X11)
+-
++#else
+   return nullptr;
++#endif  // defined(WEBRTC_USE_X11)
+ }
+ 
+ }  // namespace webrtc
+diff --git a/modules/desktop_capture/window_capturer_linux.cc b/modules/desktop_capture/window_capturer_linux.cc
+index 2b142ae3b9..89ba90d80e 100644
+--- a/modules/desktop_capture/window_capturer_linux.cc
++++ b/modules/desktop_capture/window_capturer_linux.cc
+@@ -34,9 +34,9 @@ std::unique_ptr<DesktopCapturer> DesktopCapturer::CreateRawWindowCapturer(
+ 
+ #if defined(WEBRTC_USE_X11)
+   return WindowCapturerX11::CreateRawWindowCapturer(options);
+-#endif  // defined(WEBRTC_USE_X11)
+-
++#else
+   return nullptr;
++#endif  // defined(WEBRTC_USE_X11)
+ }
+ 
+ }  // namespace webrtc
