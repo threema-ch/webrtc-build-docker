@@ -13,6 +13,7 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     python \
     python-setuptools \
     python3 \
+    python3-setuptools \
     sudo \
     wget \
     xz-utils
