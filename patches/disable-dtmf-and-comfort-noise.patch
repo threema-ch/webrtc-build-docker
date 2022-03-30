@@ -1,12 +1,25 @@
 diff --git a/media/engine/webrtc_voice_engine.cc b/media/engine/webrtc_voice_engine.cc
-index 3243418e35..056a2ba9ff 100644
+index 829cb82af1..79cd312d92 100644
 --- a/media/engine/webrtc_voice_engine.cc
 +++ b/media/engine/webrtc_voice_engine.cc
-@@ -716,22 +716,6 @@ std::vector<AudioCodec> WebRtcVoiceEngine::CollectCodecs(
-         codec.AddFeedbackParam(
+@@ -689,13 +689,6 @@ std::vector<AudioCodec> WebRtcVoiceEngine::CollectCodecs(
+   PayloadTypeMapper mapper;
+   std::vector<AudioCodec> out;
+ 
+-  // Only generate CN payload types for these clockrates:
+-  std::map<int, bool, std::greater<int>> generate_cn = {
+-      {8000, false}, {16000, false}, {32000, false}};
+-  // Only generate telephone-event payload types for these clockrates:
+-  std::map<int, bool, std::greater<int>> generate_dtmf = {
+-      {8000, false}, {16000, false}, {32000, false}, {48000, false}};
+-
+   auto map_format = [&mapper](const webrtc::SdpAudioFormat& format,
+                               std::vector<AudioCodec>* out) {
+     absl::optional<AudioCodec> opt_codec = mapper.ToAudioCodec(format);
+@@ -721,21 +714,6 @@ std::vector<AudioCodec> WebRtcVoiceEngine::CollectCodecs(
              FeedbackParam(kRtcpFbParamTransportCc, kParamValueEmpty));
        }
--
+ 
 -      if (spec.info.allow_comfort_noise) {
 -        // Generate a CN entry if the decoder allows it and we support the
 -        // clockrate.
@@ -24,8 +37,8 @@ index 3243418e35..056a2ba9ff 100644
 -
        out.push_back(codec);
  
-       if (codec.name == kOpusCodecName && audio_red_for_opus_trial_enabled_) {
-@@ -740,20 +724,6 @@ std::vector<AudioCodec> WebRtcVoiceEngine::CollectCodecs(
+       if (codec.name == kOpusCodecName && audio_red_for_opus_enabled_) {
+@@ -746,20 +724,6 @@ std::vector<AudioCodec> WebRtcVoiceEngine::CollectCodecs(
      }
    }
  
@@ -46,7 +59,7 @@ index 3243418e35..056a2ba9ff 100644
    return out;
  }
  
-@@ -1736,20 +1706,6 @@ bool WebRtcVoiceMediaChannel::SetSendCodecs(
+@@ -1677,20 +1641,6 @@ bool WebRtcVoiceMediaChannel::SetSendCodecs(
      }
    }
  
@@ -67,7 +80,7 @@ index 3243418e35..056a2ba9ff 100644
    // Scan through the list to figure out the codec to use for sending.
    absl::optional<webrtc::AudioSendStream::Config::SendCodecSpec>
        send_codec_spec;
-@@ -1787,36 +1743,6 @@ bool WebRtcVoiceMediaChannel::SetSendCodecs(
+@@ -1729,36 +1679,6 @@ bool WebRtcVoiceMediaChannel::SetSendCodecs(
    }
  
    RTC_DCHECK(voice_codec_info);
@@ -102,36 +115,39 @@ index 3243418e35..056a2ba9ff 100644
 -    }
 -  }
  
-   if (audio_red_for_opus_trial_enabled_) {
+   if (audio_red_for_opus_enabled_) {
      // Loop through the codecs to find the RED codec that matches opus
 diff --git a/sdk/android/api/org/webrtc/RtpSender.java b/sdk/android/api/org/webrtc/RtpSender.java
-index bc894e5d04..c1290bf882 100644
+index b78bbf6b3c..72b4894289 100644
 --- a/sdk/android/api/org/webrtc/RtpSender.java
 +++ b/sdk/android/api/org/webrtc/RtpSender.java
-@@ -26,9 +26,7 @@ public class RtpSender {
+@@ -26,9 +26,8 @@ public class RtpSender {
      this.nativeRtpSender = nativeRtpSender;
      long nativeTrack = nativeGetTrack(nativeRtpSender);
      cachedTrack = MediaStreamTrack.createMediaStreamTrack(nativeTrack);
 -
 -    long nativeDtmfSender = nativeGetDtmfSender(nativeRtpSender);
 -    dtmfSender = (nativeDtmfSender != 0) ? new DtmfSender(nativeDtmfSender) : null;
++
 +    dtmfSender = null;
    }
  
    /**
 diff --git a/sdk/objc/api/peerconnection/RTCRtpSender.mm b/sdk/objc/api/peerconnection/RTCRtpSender.mm
-index 1ca9360ab8..bc1b201bcd 100644
+index 12566ecf6f..bc1b201bcd 100644
 --- a/sdk/objc/api/peerconnection/RTCRtpSender.mm
 +++ b/sdk/objc/api/peerconnection/RTCRtpSender.mm
-@@ -116,12 +116,6 @@
+@@ -116,14 +116,6 @@
    if (self = [super init]) {
      _factory = factory;
      _nativeRtpSender = nativeRtpSender;
--    rtc::scoped_refptr<webrtc::DtmfSenderInterface> nativeDtmfSender(
--        _nativeRtpSender->GetDtmfSender());
--    if (nativeDtmfSender) {
--      _dtmfSender =
--          [[RTC_OBJC_TYPE(RTCDtmfSender) alloc] initWithNativeDtmfSender:nativeDtmfSender];
+-    if (_nativeRtpSender->media_type() == cricket::MEDIA_TYPE_AUDIO) {
+-      rtc::scoped_refptr<webrtc::DtmfSenderInterface> nativeDtmfSender(
+-          _nativeRtpSender->GetDtmfSender());
+-      if (nativeDtmfSender) {
+-        _dtmfSender =
+-            [[RTC_OBJC_TYPE(RTCDtmfSender) alloc] initWithNativeDtmfSender:nativeDtmfSender];
+-      }
 -    }
      RTCLogInfo(@"RTC_OBJC_TYPE(RTCRtpSender)(%p): created sender: %@", self, self.description);
    }
