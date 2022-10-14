@@ -1,8 +1,8 @@
 diff --git a/api/audio_codecs/L16/audio_decoder_L16.cc b/api/audio_codecs/L16/audio_decoder_L16.cc
-index 93863f1020..d09be03fcb 100644
+index a03abe26f7..9cda97f991 100644
 --- a/api/audio_codecs/L16/audio_decoder_L16.cc
 +++ b/api/audio_codecs/L16/audio_decoder_L16.cc
-@@ -32,17 +32,13 @@ absl::optional<AudioDecoderL16::Config> AudioDecoderL16::SdpToConfig(
+@@ -32,18 +32,14 @@ absl::optional<AudioDecoderL16::Config> AudioDecoderL16::SdpToConfig(
  
  void AudioDecoderL16::AppendSupportedDecoders(
      std::vector<AudioCodecSpec>* specs) {
@@ -12,7 +12,8 @@ index 93863f1020..d09be03fcb 100644
  
  std::unique_ptr<AudioDecoder> AudioDecoderL16::MakeAudioDecoder(
      const Config& config,
-     absl::optional<AudioCodecPairId> /*codec_pair_id*/) {
+     absl::optional<AudioCodecPairId> /*codec_pair_id*/,
+     const FieldTrialsView* field_trials) {
 -  if (!config.IsOk()) {
 -    return nullptr;
 -  }
@@ -23,7 +24,7 @@ index 93863f1020..d09be03fcb 100644
  
  }  // namespace webrtc
 diff --git a/api/audio_codecs/L16/audio_encoder_L16.cc b/api/audio_codecs/L16/audio_encoder_L16.cc
-index 590d3e32d9..c44971f0e7 100644
+index 20259b9ad8..bda92b1a20 100644
 --- a/api/audio_codecs/L16/audio_encoder_L16.cc
 +++ b/api/audio_codecs/L16/audio_encoder_L16.cc
 @@ -45,7 +45,7 @@ absl::optional<AudioEncoderL16::Config> AudioEncoderL16::SdpToConfig(
@@ -35,10 +36,10 @@ index 590d3e32d9..c44971f0e7 100644
  }
  
  AudioCodecInfo AudioEncoderL16::QueryAudioEncoder(
-@@ -60,16 +60,7 @@ std::unique_ptr<AudioEncoder> AudioEncoderL16::MakeAudioEncoder(
-     const AudioEncoderL16::Config& config,
+@@ -61,16 +61,7 @@ std::unique_ptr<AudioEncoder> AudioEncoderL16::MakeAudioEncoder(
      int payload_type,
-     absl::optional<AudioCodecPairId> /*codec_pair_id*/) {
+     absl::optional<AudioCodecPairId> /*codec_pair_id*/,
+     const FieldTrialsView* field_trials) {
 -  AudioEncoderPcm16B::Config c;
 -  c.sample_rate_hz = config.sample_rate_hz;
 -  c.num_channels = config.num_channels;
@@ -98,7 +99,7 @@ index 963cfe5cb9..db29a840a8 100644
  
  }  // namespace webrtc
 diff --git a/api/audio_codecs/builtin_audio_encoder_factory.cc b/api/audio_codecs/builtin_audio_encoder_factory.cc
-index 99fac09a57..b2b5ec82fb 100644
+index 530d64b2ba..8f566fd62b 100644
 --- a/api/audio_codecs/builtin_audio_encoder_factory.cc
 +++ b/api/audio_codecs/builtin_audio_encoder_factory.cc
 @@ -13,18 +13,9 @@
@@ -121,7 +122,7 @@ index 99fac09a57..b2b5ec82fb 100644
  
  namespace webrtc {
  
-@@ -56,18 +47,7 @@ struct NotAdvertised {
+@@ -58,18 +49,7 @@ struct NotAdvertised {
  
  rtc::scoped_refptr<AudioEncoderFactory> CreateBuiltinAudioEncoderFactory() {
    return CreateAudioEncoderFactory<
@@ -142,10 +143,10 @@ index 99fac09a57..b2b5ec82fb 100644
  
  }  // namespace webrtc
 diff --git a/api/audio_codecs/g711/audio_decoder_g711.cc b/api/audio_codecs/g711/audio_decoder_g711.cc
-index f3d3378cf2..385d2fefef 100644
+index 838f7e9624..82d1a58efe 100644
 --- a/api/audio_codecs/g711/audio_decoder_g711.cc
 +++ b/api/audio_codecs/g711/audio_decoder_g711.cc
-@@ -40,27 +40,13 @@ absl::optional<AudioDecoderG711::Config> AudioDecoderG711::SdpToConfig(
+@@ -40,28 +40,14 @@ absl::optional<AudioDecoderG711::Config> AudioDecoderG711::SdpToConfig(
  
  void AudioDecoderG711::AppendSupportedDecoders(
      std::vector<AudioCodecSpec>* specs) {
@@ -157,7 +158,8 @@ index f3d3378cf2..385d2fefef 100644
  
  std::unique_ptr<AudioDecoder> AudioDecoderG711::MakeAudioDecoder(
      const Config& config,
-     absl::optional<AudioCodecPairId> /*codec_pair_id*/) {
+     absl::optional<AudioCodecPairId> /*codec_pair_id*/,
+     const FieldTrialsView* field_trials) {
 -  if (!config.IsOk()) {
 -    RTC_DCHECK_NOTREACHED();
 -    return nullptr;
@@ -176,7 +178,7 @@ index f3d3378cf2..385d2fefef 100644
  
  }  // namespace webrtc
 diff --git a/api/audio_codecs/g711/audio_encoder_g711.cc b/api/audio_codecs/g711/audio_encoder_g711.cc
-index 4c1ce0f8e6..d3444011d6 100644
+index 1dca3b80d3..b313b528fa 100644
 --- a/api/audio_codecs/g711/audio_encoder_g711.cc
 +++ b/api/audio_codecs/g711/audio_encoder_g711.cc
 @@ -50,9 +50,7 @@ absl::optional<AudioEncoderG711::Config> AudioEncoderG711::SdpToConfig(
@@ -190,10 +192,10 @@ index 4c1ce0f8e6..d3444011d6 100644
  }
  
  AudioCodecInfo AudioEncoderG711::QueryAudioEncoder(const Config& config) {
-@@ -65,30 +63,7 @@ std::unique_ptr<AudioEncoder> AudioEncoderG711::MakeAudioEncoder(
-     const Config& config,
+@@ -66,30 +64,7 @@ std::unique_ptr<AudioEncoder> AudioEncoderG711::MakeAudioEncoder(
      int payload_type,
-     absl::optional<AudioCodecPairId> /*codec_pair_id*/) {
+     absl::optional<AudioCodecPairId> /*codec_pair_id*/,
+     const FieldTrialsView* field_trials) {
 -  if (!config.IsOk()) {
 -    RTC_DCHECK_NOTREACHED();
 -    return nullptr;
@@ -223,10 +225,10 @@ index 4c1ce0f8e6..d3444011d6 100644
  
  }  // namespace webrtc
 diff --git a/api/audio_codecs/g722/audio_decoder_g722.cc b/api/audio_codecs/g722/audio_decoder_g722.cc
-index 0049e5ab32..d7c022a313 100644
+index ed7163471a..7c0fb0b982 100644
 --- a/api/audio_codecs/g722/audio_decoder_g722.cc
 +++ b/api/audio_codecs/g722/audio_decoder_g722.cc
-@@ -31,25 +31,13 @@ absl::optional<AudioDecoderG722::Config> AudioDecoderG722::SdpToConfig(
+@@ -31,26 +31,14 @@ absl::optional<AudioDecoderG722::Config> AudioDecoderG722::SdpToConfig(
  
  void AudioDecoderG722::AppendSupportedDecoders(
      std::vector<AudioCodecSpec>* specs) {
@@ -236,7 +238,8 @@ index 0049e5ab32..d7c022a313 100644
  
  std::unique_ptr<AudioDecoder> AudioDecoderG722::MakeAudioDecoder(
      Config config,
-     absl::optional<AudioCodecPairId> /*codec_pair_id*/) {
+     absl::optional<AudioCodecPairId> /*codec_pair_id*/,
+     const FieldTrialsView* field_trials) {
 -  if (!config.IsOk()) {
 -    RTC_DCHECK_NOTREACHED();
 -    return nullptr;
@@ -255,7 +258,7 @@ index 0049e5ab32..d7c022a313 100644
  
  }  // namespace webrtc
 diff --git a/api/audio_codecs/g722/audio_encoder_g722.cc b/api/audio_codecs/g722/audio_encoder_g722.cc
-index 66cf9e19d6..7f0711963d 100644
+index 56a6c4da6a..bb05e5b226 100644
 --- a/api/audio_codecs/g722/audio_encoder_g722.cc
 +++ b/api/audio_codecs/g722/audio_encoder_g722.cc
 @@ -47,9 +47,7 @@ absl::optional<AudioEncoderG722Config> AudioEncoderG722::SdpToConfig(
@@ -269,10 +272,10 @@ index 66cf9e19d6..7f0711963d 100644
  }
  
  AudioCodecInfo AudioEncoderG722::QueryAudioEncoder(
-@@ -63,11 +61,7 @@ std::unique_ptr<AudioEncoder> AudioEncoderG722::MakeAudioEncoder(
-     const AudioEncoderG722Config& config,
+@@ -64,11 +62,7 @@ std::unique_ptr<AudioEncoder> AudioEncoderG722::MakeAudioEncoder(
      int payload_type,
-     absl::optional<AudioCodecPairId> /*codec_pair_id*/) {
+     absl::optional<AudioCodecPairId> /*codec_pair_id*/,
+     const FieldTrialsView* field_trials) {
 -  if (!config.IsOk()) {
 -    RTC_DCHECK_NOTREACHED();
 -    return nullptr;
@@ -283,10 +286,10 @@ index 66cf9e19d6..7f0711963d 100644
  
  }  // namespace webrtc
 diff --git a/api/audio_codecs/ilbc/audio_decoder_ilbc.cc b/api/audio_codecs/ilbc/audio_decoder_ilbc.cc
-index 237cef23c1..c279101a1e 100644
+index c58316903a..e8d6b94790 100644
 --- a/api/audio_codecs/ilbc/audio_decoder_ilbc.cc
 +++ b/api/audio_codecs/ilbc/audio_decoder_ilbc.cc
-@@ -29,13 +29,13 @@ absl::optional<AudioDecoderIlbc::Config> AudioDecoderIlbc::SdpToConfig(
+@@ -29,14 +29,14 @@ absl::optional<AudioDecoderIlbc::Config> AudioDecoderIlbc::SdpToConfig(
  
  void AudioDecoderIlbc::AppendSupportedDecoders(
      std::vector<AudioCodecSpec>* specs) {
@@ -296,14 +299,15 @@ index 237cef23c1..c279101a1e 100644
  
  std::unique_ptr<AudioDecoder> AudioDecoderIlbc::MakeAudioDecoder(
      Config config,
-     absl::optional<AudioCodecPairId> /*codec_pair_id*/) {
+     absl::optional<AudioCodecPairId> /*codec_pair_id*/,
+     const FieldTrialsView* field_trials) {
 -  return std::make_unique<AudioDecoderIlbcImpl>();
 +  return nullptr; // disabled
  }
  
  }  // namespace webrtc
 diff --git a/api/audio_codecs/ilbc/audio_encoder_ilbc.cc b/api/audio_codecs/ilbc/audio_encoder_ilbc.cc
-index 52ba8f6b88..2e33afc839 100644
+index b497948491..fce0527011 100644
 --- a/api/audio_codecs/ilbc/audio_encoder_ilbc.cc
 +++ b/api/audio_codecs/ilbc/audio_encoder_ilbc.cc
 @@ -62,9 +62,7 @@ absl::optional<AudioEncoderIlbcConfig> AudioEncoderIlbc::SdpToConfig(
@@ -317,10 +321,10 @@ index 52ba8f6b88..2e33afc839 100644
  }
  
  AudioCodecInfo AudioEncoderIlbc::QueryAudioEncoder(
-@@ -77,11 +75,7 @@ std::unique_ptr<AudioEncoder> AudioEncoderIlbc::MakeAudioEncoder(
-     const AudioEncoderIlbcConfig& config,
+@@ -78,11 +76,7 @@ std::unique_ptr<AudioEncoder> AudioEncoderIlbc::MakeAudioEncoder(
      int payload_type,
-     absl::optional<AudioCodecPairId> /*codec_pair_id*/) {
+     absl::optional<AudioCodecPairId> /*codec_pair_id*/,
+     const FieldTrialsView* field_trials) {
 -  if (!config.IsOk()) {
 -    RTC_DCHECK_NOTREACHED();
 -    return nullptr;
@@ -331,10 +335,10 @@ index 52ba8f6b88..2e33afc839 100644
  
  }  // namespace webrtc
 diff --git a/api/audio_codecs/isac/audio_decoder_isac_fix.cc b/api/audio_codecs/isac/audio_decoder_isac_fix.cc
-index 305e15a525..f2613b810c 100644
+index b3ab91da47..77becc9ce9 100644
 --- a/api/audio_codecs/isac/audio_decoder_isac_fix.cc
 +++ b/api/audio_codecs/isac/audio_decoder_isac_fix.cc
-@@ -28,15 +28,13 @@ absl::optional<AudioDecoderIsacFix::Config> AudioDecoderIsacFix::SdpToConfig(
+@@ -28,16 +28,14 @@ absl::optional<AudioDecoderIsacFix::Config> AudioDecoderIsacFix::SdpToConfig(
  
  void AudioDecoderIsacFix::AppendSupportedDecoders(
      std::vector<AudioCodecSpec>* specs) {
@@ -344,7 +348,8 @@ index 305e15a525..f2613b810c 100644
  
  std::unique_ptr<AudioDecoder> AudioDecoderIsacFix::MakeAudioDecoder(
      Config config,
-     absl::optional<AudioCodecPairId> /*codec_pair_id*/) {
+     absl::optional<AudioCodecPairId> /*codec_pair_id*/,
+     const FieldTrialsView* field_trials) {
 -  AudioDecoderIsacFixImpl::Config c;
 -  c.sample_rate_hz = 16000;
 -  return std::make_unique<AudioDecoderIsacFixImpl>(c);
@@ -353,10 +358,10 @@ index 305e15a525..f2613b810c 100644
  
  }  // namespace webrtc
 diff --git a/api/audio_codecs/isac/audio_decoder_isac_float.cc b/api/audio_codecs/isac/audio_decoder_isac_float.cc
-index 683eb6c0ad..5577765b1b 100644
+index 98f672b468..813819d569 100644
 --- a/api/audio_codecs/isac/audio_decoder_isac_float.cc
 +++ b/api/audio_codecs/isac/audio_decoder_isac_float.cc
-@@ -36,20 +36,13 @@ AudioDecoderIsacFloat::SdpToConfig(const SdpAudioFormat& format) {
+@@ -36,21 +36,14 @@ AudioDecoderIsacFloat::SdpToConfig(const SdpAudioFormat& format) {
  
  void AudioDecoderIsacFloat::AppendSupportedDecoders(
      std::vector<AudioCodecSpec>* specs) {
@@ -367,7 +372,8 @@ index 683eb6c0ad..5577765b1b 100644
  
  std::unique_ptr<AudioDecoder> AudioDecoderIsacFloat::MakeAudioDecoder(
      Config config,
-     absl::optional<AudioCodecPairId> /*codec_pair_id*/) {
+     absl::optional<AudioCodecPairId> /*codec_pair_id*/,
+     const FieldTrialsView* field_trials) {
 -  AudioDecoderIsacFloatImpl::Config c;
 -  c.sample_rate_hz = config.sample_rate_hz;
 -  if (!config.IsOk()) {
@@ -380,7 +386,7 @@ index 683eb6c0ad..5577765b1b 100644
  
  }  // namespace webrtc
 diff --git a/api/audio_codecs/isac/audio_encoder_isac_fix.cc b/api/audio_codecs/isac/audio_encoder_isac_fix.cc
-index b590be1ea3..b42f6f268f 100644
+index 39603775a4..84ca29e033 100644
 --- a/api/audio_codecs/isac/audio_encoder_isac_fix.cc
 +++ b/api/audio_codecs/isac/audio_encoder_isac_fix.cc
 @@ -42,9 +42,7 @@ absl::optional<AudioEncoderIsacFix::Config> AudioEncoderIsacFix::SdpToConfig(
@@ -394,10 +400,10 @@ index b590be1ea3..b42f6f268f 100644
  }
  
  AudioCodecInfo AudioEncoderIsacFix::QueryAudioEncoder(
-@@ -57,15 +55,7 @@ std::unique_ptr<AudioEncoder> AudioEncoderIsacFix::MakeAudioEncoder(
-     AudioEncoderIsacFix::Config config,
+@@ -58,15 +56,7 @@ std::unique_ptr<AudioEncoder> AudioEncoderIsacFix::MakeAudioEncoder(
      int payload_type,
-     absl::optional<AudioCodecPairId> /*codec_pair_id*/) {
+     absl::optional<AudioCodecPairId> /*codec_pair_id*/,
+     const FieldTrialsView* field_trials) {
 -  AudioEncoderIsacFixImpl::Config c;
 -  c.frame_size_ms = config.frame_size_ms;
 -  c.bit_rate = config.bit_rate;
@@ -412,7 +418,7 @@ index b590be1ea3..b42f6f268f 100644
  
  }  // namespace webrtc
 diff --git a/api/audio_codecs/isac/audio_encoder_isac_float.cc b/api/audio_codecs/isac/audio_encoder_isac_float.cc
-index e2afeae84e..3d3cfe7bfe 100644
+index e3e50080fa..5bcea0f1bd 100644
 --- a/api/audio_codecs/isac/audio_encoder_isac_float.cc
 +++ b/api/audio_codecs/isac/audio_encoder_isac_float.cc
 @@ -49,11 +49,7 @@ AudioEncoderIsacFloat::SdpToConfig(const SdpAudioFormat& format) {
@@ -428,10 +434,10 @@ index e2afeae84e..3d3cfe7bfe 100644
  }
  
  AudioCodecInfo AudioEncoderIsacFloat::QueryAudioEncoder(
-@@ -69,16 +65,7 @@ std::unique_ptr<AudioEncoder> AudioEncoderIsacFloat::MakeAudioEncoder(
-     const AudioEncoderIsacFloat::Config& config,
+@@ -70,16 +66,7 @@ std::unique_ptr<AudioEncoder> AudioEncoderIsacFloat::MakeAudioEncoder(
      int payload_type,
-     absl::optional<AudioCodecPairId> /*codec_pair_id*/) {
+     absl::optional<AudioCodecPairId> /*codec_pair_id*/,
+     const FieldTrialsView* field_trials) {
 -  AudioEncoderIsacFloatImpl::Config c;
 -  c.payload_type = payload_type;
 -  c.sample_rate_hz = config.sample_rate_hz;
