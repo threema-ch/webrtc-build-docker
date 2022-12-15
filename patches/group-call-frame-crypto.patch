@@ -1,0 +1,2366 @@
+diff --git a/pc/BUILD.gn b/pc/BUILD.gn
+index 26a044b615..933c4ce2e2 100644
+--- a/pc/BUILD.gn
++++ b/pc/BUILD.gn
+@@ -1220,6 +1220,28 @@ rtc_source_set("peer_connection") {
+   ]
+ }
+ 
++rtc_source_set("threema_group_call_frame_transformer") {
++  visibility = [ "*" ]
++  sources = [
++    "threema_group_call_frame_transformer.cc",
++    "threema_group_call_frame_transformer.h",
++  ]
++  deps = [
++    "//third_party/boringssl",
++    "../api:frame_transformer_interface",
++    "../api:make_ref_counted",
++    "../api:scoped_refptr",
++    "../rtc_base:byte_order",
++    "../rtc_base:checks",
++    "../rtc_base:logging",
++    "../rtc_base/synchronization:mutex",
++    "../rtc_base/third_party/threema-blake2b",
++  ]
++  absl_deps = [
++    "//third_party/abseil-cpp/absl/types:optional",
++  ]
++}
++
+ rtc_source_set("sdp_serializer") {
+   visibility = [ ":*" ]
+   sources = [
+diff --git a/pc/threema_group_call_frame_transformer.cc b/pc/threema_group_call_frame_transformer.cc
+new file mode 100644
+index 0000000000..45bad1b805
+--- /dev/null
++++ b/pc/threema_group_call_frame_transformer.cc
+@@ -0,0 +1,812 @@
++/*
++ * Copyright 2022 Threema GmbH. All Rights Reserved.
++ *
++ * Use of this source code is governed by a BSD-style license
++ * that can be found in the LICENSE file in the root of the source
++ * tree.
++ */
++
++#include "pc/threema_group_call_frame_transformer.h"
++
++// We're using BoringSSL which gives us a tad nicer API surface, see:
++// https://commondatastorage.googleapis.com/chromium-boringssl-docs/headers.html
++#include <openssl/aead.h>
++#include <openssl/base.h>
++
++#include "absl/types/optional.h"
++#include "api/frame_transformer_interface.h"
++#include "api/make_ref_counted.h"
++#include "api/scoped_refptr.h"
++#include "rtc_base/byte_order.h"
++#include "rtc_base/checks.h"
++#include "rtc_base/logging.h"
++#include "rtc_base/synchronization/mutex.h"
++#include "rtc_base/third_party/threema-blake2b/blake2b.h"
++
++namespace threema {
++
++uint8_t const hash_personal[BLAKE2B_PERSONALBYTES] = {
++    // '3ma-call', followed by 8 zeroes
++    0x33, 0x6d, 0x61, 0x2d, 0x63, 0x61, 0x6c, 0x6c,
++    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
++};
++uint8_t const hash_next_pcmk_salt[BLAKE2B_SALTBYTES] = {
++    // "m'", followed by 14 zeroes
++    0x6d, 0x27, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
++    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
++};
++uint8_t const hash_pcmfk_salt[BLAKE2B_SALTBYTES] = {
++    // 'mf', followed by 14 zeroes
++    0x6d, 0x66, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
++    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
++};
++
++static void derive_next_pcmk(uint8_t pcmk[kKeyLength]) {
++  // PCMK' = BLAKE2b(key=PCMK, salt="m'", personal='3ma-call')
++  blake2b_state state = {{0}};
++  RTC_CHECK(blake2b_init_with_params(&state, kKeyLength, pcmk, kKeyLength,
++                                     hash_next_pcmk_salt, hash_personal) == 0);
++  RTC_CHECK(blake2b_final(&state, pcmk, kKeyLength) == 0);
++}
++
++static void derive_pcmfk(uint8_t const gckh[kKeyLength],
++                         uint8_t const pcmk[kKeyLength],
++                         uint8_t pcmfk[kKeyLength]) {
++  // PCMFK = BLAKE2b(key=PCMK, salt='mf', personal='3ma-call', input=GCKH)
++  blake2b_state state = {{0}};
++  RTC_CHECK(blake2b_init_with_params(&state, kKeyLength, pcmk, kKeyLength,
++                                     hash_pcmfk_salt, hash_personal) == 0);
++  RTC_CHECK(blake2b_update(&state, gckh, kKeyLength) == 0);
++  RTC_CHECK(blake2b_final(&state, pcmfk, kKeyLength) == 0);
++}
++
++static bool inline setup_aead_ctx(
++    GroupCallFrameCryptoAeadCtxState& aead_ctx_state,
++    EVP_AEAD const* const cipher,
++    GroupCallFrameCryptoKeyState const* const target) {
++  if (!aead_ctx_state.initialized || aead_ctx_state.epoch != target->epoch ||
++      aead_ctx_state.ratchet_counter != target->ratchet_counter) {
++    RTC_DCHECK(!aead_ctx_state.initialized ||
++               ((target->epoch == 0 && aead_ctx_state.epoch == 255) ||
++                target->epoch > aead_ctx_state.epoch ||
++                (target->epoch == aead_ctx_state.epoch &&
++                 target->ratchet_counter > aead_ctx_state.ratchet_counter)));
++    if (!EVP_AEAD_CTX_init(&aead_ctx_state.aead_ctx, cipher, target->pcmfk,
++                           kKeyLength, kTagLength, nullptr)) {
++      RTC_LOG(LS_ERROR) << "Failed to initialise AEAD context";
++      return false;
++    }
++    aead_ctx_state.initialized = true;
++    aead_ctx_state.epoch = target->epoch;
++    aead_ctx_state.ratchet_counter = target->ratchet_counter;
++  }
++  return true;
++}
++
++/*
++ * #region GroupCallFrameEncryptorKeyContext
++ */
++GroupCallFrameEncryptorKeyContext::GroupCallFrameEncryptorKeyContext(
++    uint8_t const gckh[kKeyLength])
++    : state({0}) {
++  std::memcpy(this->gckh, gckh, kKeyLength);
++}
++
++void GroupCallFrameEncryptorKeyContext::SetPcmk(uint8_t const pcmk[kKeyLength],
++                                                uint8_t const epoch,
++                                                uint8_t const ratchet_counter) {
++  webrtc::MutexLock lock(&mutex);
++
++  // Note: We intentionally do **not** reset the MFSN since it could
++  //       result in nonce reuse if we have a bug somewhere in this code!
++
++  // Ensure we're not reusing an epoch or ratchet counter within an epoch.
++  // This would otherwise lead to nonce reuse.
++  if (initialized) {
++    RTC_CHECK(
++        (epoch == 0 && state.epoch == 255) || epoch > state.epoch ||
++        (epoch == state.epoch && ratchet_counter > state.ratchet_counter));
++  }
++
++  // Update state
++  initialized = true;
++  std::memcpy(&state.pcmk, pcmk, kKeyLength);
++  derive_pcmfk(gckh, pcmk, state.pcmfk);
++  state.epoch = epoch;
++  state.ratchet_counter = ratchet_counter;
++  RTC_LOG(LS_INFO) << "Applied new PCMK (epoch=" << epoch
++                   << ", ratchet-counter=" << ratchet_counter << ")";
++}
++
++absl::optional<GroupCallFrameCryptoKeyStateSnapshot>
++GroupCallFrameEncryptorKeyContext::Apply(
++    GroupCallFrameCryptoAeadCtxState& aead_ctx_state,
++    EVP_AEAD const* const cipher) {
++  webrtc::MutexLock lock(&mutex);
++
++  // Ensure the context is initialised
++  if (!initialized) {
++    RTC_LOG(LS_ERROR) << "Encryptor context not initialized";
++    return absl::nullopt;
++  }
++
++  // Get and increase MFSN.
++  //
++  // Note: While technically feasible to reach 2^32 - 1, it approximately
++  //       takes multiple days. Hopefully no one is that insane.
++  RTC_CHECK(state.mfsn < UINT32_MAX);
++  GroupCallFrameCryptoKeyStateSnapshot snapshot = {
++      .mfsn_le = htole32(static_cast<uint32_t>(state.mfsn++)),
++      .epoch = state.epoch,
++      .ratchet_counter = state.ratchet_counter,
++  };
++
++  // Setup AEAD context and apply the PCMFK, if necessary
++  if (!setup_aead_ctx(aead_ctx_state, cipher, &state)) {
++    return absl::nullopt;
++  }
++
++  // Return the current key state snapshot
++  return snapshot;
++}
++
++/*
++ * #region GroupCallFrameDecryptorKeysContext
++ */
++GroupCallFrameDecryptorKeysContext::GroupCallFrameDecryptorKeysContext(
++    uint8_t const gckh[kKeyLength]) {
++  std::memcpy(this->gckh, gckh, kKeyLength);
++}
++
++void GroupCallFrameDecryptorKeysContext::AddPcmk(
++    uint8_t const pcmk[kKeyLength],
++    uint8_t const epoch,
++    uint8_t const ratchet_counter) {
++  webrtc::MutexLock lock(&mutex);
++
++  // Ensure we're not adding an old/existing epoch (with the exception of
++  // wrapping)
++  if (!states.empty()) {
++    auto newest_epoch = states.back().epoch;
++    if (!(epoch == 0 && newest_epoch == 255) && epoch < newest_epoch) {
++      RTC_LOG(LS_WARNING)
++          << "Discarding PCMK that would downgrade the epoch (newest="
++          << newest_epoch << ", provided=" << epoch << ")";
++      return;
++    }
++  }
++
++  // Add state
++  GroupCallFrameCryptoKeyState state = {
++      .mfsn = 0,
++      .pcmk = {0},
++      .pcmfk = {0},
++      .epoch = epoch,
++      .ratchet_counter = ratchet_counter,
++  };
++  std::memcpy(&state.pcmk, pcmk, kKeyLength);
++  derive_pcmfk(gckh, pcmk, state.pcmfk);
++  states.push_back(state);
++  RTC_LOG(LS_INFO) << "Added new PCMK (epoch=" << epoch
++                   << ", ratchet-counter=" << ratchet_counter << ")";
++}
++
++bool GroupCallFrameDecryptorKeysContext::Apply(
++    GroupCallFrameCryptoAeadCtxState& aead_ctx_state,
++    EVP_AEAD const* const cipher,
++    GroupCallFrameCryptoKeyStateSnapshot const& target) {
++  webrtc::MutexLock lock(&mutex);
++
++  // Align the decryptor state
++  auto const maybe_state = AlignWith(target);
++  if (!maybe_state.has_value()) {
++    return false;
++  }
++  auto const* const state = maybe_state.value();
++
++  // Setup AEAD context and apply the PCMFK, if necessary
++  return setup_aead_ctx(aead_ctx_state, cipher, state);
++}
++
++absl::optional<GroupCallFrameCryptoKeyState* const>
++GroupCallFrameDecryptorKeysContext::AlignWith(
++    GroupCallFrameCryptoKeyStateSnapshot const& target) {
++  // Lookup the decryptor state by epoch and purge all contexts of older
++  // epochs
++  for (;;) {
++    auto const state = states.begin();
++
++    // Check if any states are left
++    if (state == states.end()) {
++      RTC_LOG(LS_WARNING) << "No decryptor context available";
++      return absl::nullopt;
++    }
++
++    // Same epoch: Align the ratchet counter.
++    if (target.epoch == state->epoch) {
++      // Same ratchet counter: No-op.
++      if (target.ratchet_counter == state->ratchet_counter) {
++        return &*state;
++      }
++
++      // Old rachet counter: Discard.
++      if (target.ratchet_counter < state->ratchet_counter) {
++        RTC_LOG(LS_WARNING) << "No decryptor context for old ratchet counter "
++                            << target.ratchet_counter << " available";
++        return absl::nullopt;
++      }
++
++      // Newer ratchet counter: Apply the ratchet until the counter matches.
++      for (; target.ratchet_counter != state->ratchet_counter;
++           ++state->ratchet_counter) {
++        RTC_LOG(LS_INFO) << "Discarding decryptor state (ratchet counter "
++                         << state->ratchet_counter << " < "
++                         << target.ratchet_counter << ")";
++        derive_next_pcmk(state->pcmk);
++        derive_pcmfk(gckh, state->pcmk, state->pcmfk);
++      }
++      return &*state;
++    }
++
++    // Older epoch: Discard.
++    //
++    // Note: Epoch `0` is handled specially because the epoch is allowed to
++    //       wrap. Since different media frames may race with each other, we
++    //       apply a heuristic to prevent accidental wrapping back from epoch
++    //       `1` to `0`. Otherwise, we just seek until we find epoch `0` again.
++    if ((target.epoch == 0 && state->epoch < 128) ||
++        (target.epoch != 0 && target.epoch < state->epoch)) {
++      RTC_LOG(LS_WARNING) << "No decryptor context for old epoch "
++                          << target.epoch << " available";
++      return absl::nullopt;
++    }
++
++    // Newer epoch: Drop the current state and continue searching.
++    RTC_LOG(LS_INFO) << "Discarding decryptor state (epoch " << state->epoch
++                     << " < " << target.epoch << ")";
++    states.erase(state);
++  }
++}
++
++/*
++ * #region GroupCallFrameEncryptor
++ */
++GroupCallFrameEncryptor::GroupCallFrameEncryptor(
++    std::string const tag,
++    Codec const codec,
++    rtc::scoped_refptr<GroupCallFrameEncryptorKeyContext> const key_ctx)
++    : tag(tag),
++      codec(codec),
++      cipher(EVP_aead_aes_256_gcm()),
++      key_ctx(std::move(key_ctx)),
++      aead_ctx_state() {
++  // Do some sanity checks
++  RTC_CHECK(EVP_AEAD_key_length(cipher) == kKeyLength);
++  RTC_CHECK(EVP_AEAD_nonce_length(cipher) == kNonceLength);
++  RTC_CHECK(EVP_AEAD_max_tag_len(cipher) == kTagLength);
++}
++
++GroupCallFrameEncryptor::~GroupCallFrameEncryptor() {
++  EVP_AEAD_CTX_zero(&aead_ctx_state.aead_ctx);
++  RTC_DLOG(LS_VERBOSE) << tag << " Encryptor::Destroyed";
++}
++
++void GroupCallFrameEncryptor::Transform(
++    std::unique_ptr<webrtc::TransformableFrameInterface> frame) {
++  // Lookup frame dispatcher by SSRC
++  uint32_t const ssrc = frame->GetSsrc();
++  auto const* const frame_dispatcher = GetFrameDispatcher(ssrc);
++  if (frame_dispatcher == nullptr) {
++    RTC_LOG(LS_ERROR) << tag << " No frame dispatcher registered for SSRC "
++                      << ssrc;
++    return;
++  }
++  auto const unencrypted = frame->GetData();
++  RTC_DLOG(LS_VERBOSE) << tag
++                       << " Unencrypted frame (length=" << unencrypted.size()
++                       << ", ssrc=" << ssrc << ")";
++
++  // Check frame length
++  if (unencrypted.size() == 0) {
++    if (codec == Codec::kOpus) {
++      // Opus DTX generates empty frames for discontinued transmission (i.e.
++      // silence)
++      frame_dispatcher->get()->OnTransformedFrame(std::move(frame));
++    } else {
++      RTC_LOG(LS_ERROR) << tag << " Discarding unencrypted frame of 0 bytes";
++    }
++    return;
++  }
++  if (unencrypted.size() > kMaxUnencryptedFrameLength) {
++    RTC_LOG(LS_ERROR) << tag << " Discarding unencrypted frame exceeding "
++                      << kMaxUnencryptedFrameLength << " bytes";
++    return;
++  }
++
++  // For VP8, extract the header that should remain unencrypted
++  size_t unencrypted_header_length = 0;
++  if (codec == Codec::kVp8) {
++    if (unencrypted.size() < 3) {
++      RTC_LOG(LS_ERROR) << tag
++                        << " Discarding invalid VP8 payload, byte length < 3";
++      return;
++    }
++    bool const isKeyFrame = (unencrypted[0] & 0x01) == 0;
++    if (isKeyFrame) {
++      RTC_DLOG(LS_VERBOSE) << tag << " Got a VP8 keyframe";
++      if (unencrypted.size() < 10) {
++        RTC_LOG(LS_ERROR)
++            << tag
++            << " Discarding invalid VP8 payload key frame, byte length < 10";
++        return;
++      }
++      unencrypted_header_length = 10;
++    } else {
++      unencrypted_header_length = 3;
++    }
++  }
++
++  // Apply key state. This sets up the AEAD context with the PCMFK.
++  auto snapshot = key_ctx->Apply(aead_ctx_state, cipher);
++  if (!snapshot.has_value()) {
++    RTC_LOG(LS_WARNING) << tag
++                        << " Discarding frame because the key state was not "
++                           "provided (or failed to apply)";
++    return;
++  }
++
++  // Encode nonce
++  uint8_t nonce[kNonceLength] = {0};
++  std::memcpy(nonce, &snapshot->mfsn_le, sizeof(snapshot->mfsn_le));
++
++  // Encode additional data
++  size_t const additional_data_length =
++      kBaseAdditionalDataLength + unencrypted_header_length;
++  uint8_t additional_data[additional_data_length];
++  additional_data[0] = snapshot->epoch;
++  additional_data[1] = snapshot->ratchet_counter;
++  std::memcpy(additional_data + 2, &snapshot->mfsn_le,
++              sizeof(snapshot->mfsn_le));
++  static_assert(sizeof(snapshot->mfsn_le) + 2 == kBaseAdditionalDataLength, "");
++  std::memcpy(additional_data + kBaseAdditionalDataLength, unencrypted.data(),
++              unencrypted_header_length);
++
++  // Prepare the encoded output buffer
++  size_t const unencrypted_payload_length =
++      unencrypted.size() - unencrypted_header_length;
++  size_t const encrypted_payload_length =
++      unencrypted_payload_length + kTagLength;
++  size_t const encoded_length = unencrypted_header_length +
++                                encrypted_payload_length +
++                                kBaseAdditionalDataLength;
++  uint8_t encoded[encoded_length];
++  uint8_t* encoded_ptr = encoded;
++
++  // Write unencrypted header
++  std::memcpy(encoded_ptr, unencrypted.data(), unencrypted_header_length);
++  encoded_ptr += unencrypted_header_length;
++
++  // Encrypt and write encrypted payload, including the 16 byte tag
++  {
++    size_t actual_encrypted_payload_length;
++    if (!EVP_AEAD_CTX_seal(&aead_ctx_state.aead_ctx, encoded_ptr,
++                           &actual_encrypted_payload_length,
++                           encrypted_payload_length, nonce, kNonceLength,
++                           unencrypted.data() + unencrypted_header_length,
++                           unencrypted_payload_length, additional_data,
++                           additional_data_length)) {
++      RTC_LOG(LS_ERROR) << tag << " Unable to encrypt data";
++      return;
++    }
++    if (actual_encrypted_payload_length != encrypted_payload_length) {
++      RTC_LOG(LS_ERROR) << tag
++                        << " Unexpected amount of bytes encrypted (expected="
++                        << encrypted_payload_length
++                        << ", actual=" << actual_encrypted_payload_length
++                        << ")";
++      return;
++    }
++    encoded_ptr += encrypted_payload_length;
++  }
++
++  // Write the 6 byte footer
++  std::memcpy(encoded_ptr, additional_data, kBaseAdditionalDataLength);
++  encoded_ptr += kBaseAdditionalDataLength;
++
++  // Update frame data
++  RTC_DCHECK(encoded + encoded_length == encoded_ptr);
++  RTC_DLOG(LS_VERBOSE) << tag << " Encrypted frame (mfsn="
++                       << le32toh(snapshot->mfsn_le)
++                       << ", length=" << unencrypted.size() << " -> "
++                       << encoded_length << ", ssrc=" << ssrc << ")";
++  frame->SetData(rtc::ArrayView<const uint8_t>(encoded, encoded_length));
++  frame_dispatcher->get()->OnTransformedFrame(std::move(frame));
++}
++
++void GroupCallFrameEncryptor::RegisterTransformedFrameCallback(
++    rtc::scoped_refptr<webrtc::TransformedFrameCallback> const dispatcher) {
++  RTC_DCHECK(frame_dispatchers.size() == 0);
++
++  // Add non-SSRC based dispatcher (deprecated)
++  RTC_LOG(LS_VERBOSE)
++      << tag << " Registering legacy frame dispatcher for unknown SSRC";
++  frame_dispatcher = std::move(dispatcher);
++}
++
++void GroupCallFrameEncryptor::RegisterTransformedFrameSinkCallback(
++    rtc::scoped_refptr<webrtc::TransformedFrameCallback> const dispatcher,
++    uint32_t const ssrc) {
++  RTC_DCHECK(frame_dispatcher == nullptr);
++
++  // Replace any existing dispatcher for this SSRC
++  for (auto& existing_frame_dispatcher : frame_dispatchers) {
++    if (existing_frame_dispatcher.first == ssrc) {
++      RTC_LOG(LS_WARNING) << tag
++                          << " Replacing existing frame dispatcher for SSRC "
++                          << ssrc;
++      existing_frame_dispatcher.second = std::move(dispatcher);
++      return;
++    }
++  }
++
++  // No existing dispatcher found for this SSRC, add a new one
++  RTC_LOG(LS_VERBOSE) << tag << " Registering frame dispatcher for SSRC "
++                      << ssrc;
++  frame_dispatchers.push_back(std::make_pair(ssrc, std::move(dispatcher)));
++}
++
++void GroupCallFrameEncryptor::UnregisterTransformedFrameCallback() {
++  RTC_LOG(LS_VERBOSE)
++      << tag << " Unregistering legacy frame dispatcher for unknown SSRC";
++  frame_dispatcher = nullptr;
++}
++
++void GroupCallFrameEncryptor::UnregisterTransformedFrameSinkCallback(
++    uint32_t const ssrc) {
++  frame_dispatchers.erase(
++      std::remove_if(frame_dispatchers.begin(), frame_dispatchers.end(),
++                     [=](auto& frame_dispatcher) {
++                       if (frame_dispatcher.first == ssrc) {
++                         RTC_LOG(LS_VERBOSE)
++                             << tag
++                             << " Unregistering frame dispatcher for SSRC "
++                             << ssrc;
++                         return true;
++                       } else {
++                         return false;
++                       }
++                     }),
++      frame_dispatchers.end());
++}
++
++rtc::scoped_refptr<webrtc::TransformedFrameCallback>*
++GroupCallFrameEncryptor::GetFrameDispatcher(uint32_t const ssrc) {
++  // Deprecated
++  if (frame_dispatcher != nullptr) {
++    return &frame_dispatcher;
++  }
++
++  // Lookup frame dispatcher
++  for (auto& frame_dispatcher : frame_dispatchers) {
++    if (frame_dispatcher.first == ssrc) {
++      return &frame_dispatcher.second;
++    }
++  }
++
++  // None found
++  return nullptr;
++}
++
++/*
++ * #region GroupCallFrameDecryptor
++ */
++GroupCallFrameDecryptor::GroupCallFrameDecryptor(
++    std::string const tag,
++    Codec const codec,
++    rtc::scoped_refptr<GroupCallFrameDecryptorKeysContext> const keys_ctx)
++    : tag(tag),
++      codec(codec),
++      cipher(EVP_aead_aes_256_gcm()),
++      keys_ctx(std::move(keys_ctx)),
++      aead_ctx_state() {
++  // Do some sanity checks
++  RTC_CHECK(EVP_AEAD_key_length(cipher) == kKeyLength);
++  RTC_CHECK(EVP_AEAD_nonce_length(cipher) == kNonceLength);
++  RTC_CHECK(EVP_AEAD_max_tag_len(cipher) == kTagLength);
++}
++
++GroupCallFrameDecryptor::~GroupCallFrameDecryptor() {
++  EVP_AEAD_CTX_zero(&aead_ctx_state.aead_ctx);
++  RTC_DLOG(LS_VERBOSE) << tag << " Decryptor::Destroyed";
++}
++
++void GroupCallFrameDecryptor::Transform(
++    std::unique_ptr<webrtc::TransformableFrameInterface> frame) {
++  // Lookup frame dispatcher by SSRC
++  uint32_t const ssrc = frame->GetSsrc();
++  auto const* const frame_dispatcher = GetFrameDispatcher(ssrc);
++  if (frame_dispatcher == nullptr) {
++    RTC_LOG(LS_ERROR) << tag << " No frame dispatcher registered for SSRC "
++                      << ssrc;
++    return;
++  }
++  auto const encrypted = frame->GetData();
++  RTC_DLOG(LS_VERBOSE) << tag << " Encrypted frame (length=" << encrypted.size()
++                       << ", ssrc=" << ssrc << ")";
++
++  // Check full frame length
++  if (encrypted.size() == 0) {
++    if (codec == Codec::kOpus) {
++      // Opus DTX generates empty frames for discontinued transmission (i.e.
++      // silence)
++      frame_dispatcher->get()->OnTransformedFrame(std::move(frame));
++    } else {
++      RTC_LOG(LS_ERROR) << tag << " Discarding encrypted frame of 0 bytes";
++    }
++    return;
++  }
++  if (encrypted.size() > kMaxUnencryptedFrameLength) {
++    RTC_LOG(LS_WARNING) << tag << " Discarding encrypted frame exceeding "
++                        << kMaxUnencryptedFrameLength << " bytes";
++    return;
++  }
++
++  // For VP8, extract the header that remained unencrypted
++  if (encrypted.size() < 1) {
++    RTC_LOG(LS_WARNING)
++        << tag << " Discarding encrypted frame containing less than 1 byte";
++    return;
++  }
++  size_t unencrypted_header_length = 0;
++  if (codec == Codec::kVp8) {
++    bool const isKeyFrame = (encrypted[0] & 0x01) == 0;
++    if (isKeyFrame) {
++      RTC_DLOG(LS_VERBOSE) << tag << " Got a VP8 keyframe";
++      unencrypted_header_length = 10;
++    } else {
++      unencrypted_header_length = 3;
++    }
++  }
++
++  // Check encrypted frame length
++  if (encrypted.size() - unencrypted_header_length <
++      kTagLength + kBaseAdditionalDataLength) {
++    RTC_LOG(LS_WARNING)
++        << tag
++        << " Discarding invalid frame, does not contain the 6 byte footer";
++    return;
++  }
++
++  // Extract footer and apply key state. This sets up the AEAD context with the
++  // PCMFK.
++  //
++  // Note: We're not doing sequence number counting when decrypting since
++  // reordering may happen and replay is deemed somewhat acceptable here.
++  uint8_t const* const footer =
++      encrypted.data() + (encrypted.size() - kBaseAdditionalDataLength);
++  GroupCallFrameCryptoKeyStateSnapshot snapshot = {
++      .mfsn_le = 0,
++      .epoch = footer[0],
++      .ratchet_counter = footer[1],
++  };
++  std::memcpy(&snapshot.mfsn_le, footer + 2, sizeof(snapshot.mfsn_le));
++  if (!keys_ctx->Apply(aead_ctx_state, cipher, snapshot)) {
++    RTC_LOG(LS_WARNING) << tag
++                        << " Discarding frame because the key state was not "
++                           "provided (or failed to apply)";
++    return;
++  }
++
++  // Encode nonce
++  uint8_t nonce[kNonceLength] = {0};
++  std::memcpy(nonce, &snapshot.mfsn_le, sizeof(snapshot.mfsn_le));
++
++  // Encode additional data
++  size_t const additional_data_length =
++      kBaseAdditionalDataLength + unencrypted_header_length;
++  uint8_t additional_data[additional_data_length];
++  std::memcpy(additional_data, footer, kBaseAdditionalDataLength);
++  std::memcpy(additional_data + kBaseAdditionalDataLength, encrypted.data(),
++              unencrypted_header_length);
++
++  // Prepare the decoded output buffer
++  size_t const encrypted_payload_length =
++      encrypted.size() - unencrypted_header_length - kBaseAdditionalDataLength;
++  size_t const decrypted_payload_length = encrypted_payload_length - kTagLength;
++  size_t const decoded_length =
++      unencrypted_header_length + decrypted_payload_length;
++  uint8_t decoded[decoded_length];
++
++  // Write unencrypted header
++  std::memcpy(decoded, encrypted.data(), unencrypted_header_length);
++
++  // Decrypt the encrypted payload, including the 16 byte tag
++  {
++    size_t actual_decrypted_payload_length;
++    if (!EVP_AEAD_CTX_open(
++            &aead_ctx_state.aead_ctx, decoded + unencrypted_header_length,
++            &actual_decrypted_payload_length, decrypted_payload_length, nonce,
++            kNonceLength, encrypted.data() + unencrypted_header_length,
++            encrypted_payload_length, additional_data,
++            additional_data_length)) {
++      RTC_LOG(LS_WARNING) << tag << " Unable to decrypt data";
++      return;
++    }
++    if (actual_decrypted_payload_length != decrypted_payload_length) {
++      RTC_LOG(LS_ERROR) << tag
++                        << " Unexpected amount of bytes decrypted (expected="
++                        << decrypted_payload_length
++                        << ", actual=" << actual_decrypted_payload_length
++                        << ")";
++      return;
++    }
++  }
++
++  // Update frame data
++  RTC_DLOG(LS_VERBOSE) << tag
++                       << " Decrypted frame (mfsn=" << le32toh(snapshot.mfsn_le)
++                       << ", length=" << encrypted.size() << " -> "
++                       << decoded_length << ", ssrc=" << ssrc << ")";
++  frame->SetData(rtc::ArrayView<const uint8_t>(decoded, decoded_length));
++  frame_dispatcher->get()->OnTransformedFrame(std::move(frame));
++}
++
++void GroupCallFrameDecryptor::RegisterTransformedFrameCallback(
++    rtc::scoped_refptr<webrtc::TransformedFrameCallback> const dispatcher) {
++  RTC_DCHECK(frame_dispatchers.size() == 0);
++
++  // Add non-SSRC based dispatcher (deprecated)
++  RTC_LOG(LS_VERBOSE)
++      << tag << " Registering legacy frame dispatcher for unknown SSRC";
++  frame_dispatcher = std::move(dispatcher);
++}
++
++void GroupCallFrameDecryptor::RegisterTransformedFrameSinkCallback(
++    rtc::scoped_refptr<webrtc::TransformedFrameCallback> const dispatcher,
++    uint32_t const ssrc) {
++  RTC_DCHECK(frame_dispatcher == nullptr);
++
++  // Replace any existing dispatcher for this SSRC
++  for (auto& existing_frame_dispatcher : frame_dispatchers) {
++    if (existing_frame_dispatcher.first == ssrc) {
++      RTC_LOG(LS_WARNING) << tag
++                          << " Replacing existing frame dispatcher for SSRC "
++                          << ssrc;
++      existing_frame_dispatcher.second = std::move(dispatcher);
++      return;
++    }
++  }
++
++  // No existing dispatcher found for this SSRC, add a new one
++  RTC_LOG(LS_VERBOSE) << tag << " Registering frame dispatcher for SSRC "
++                      << ssrc;
++  frame_dispatchers.push_back(std::make_pair(ssrc, std::move(dispatcher)));
++}
++
++void GroupCallFrameDecryptor::UnregisterTransformedFrameCallback() {
++  RTC_LOG(LS_VERBOSE)
++      << tag << " Unregistering legacy frame dispatcher for unknown SSRC";
++  frame_dispatcher = nullptr;
++}
++
++void GroupCallFrameDecryptor::UnregisterTransformedFrameSinkCallback(
++    uint32_t const ssrc) {
++  frame_dispatchers.erase(
++      std::remove_if(frame_dispatchers.begin(), frame_dispatchers.end(),
++                     [=](auto& frame_dispatcher) {
++                       if (frame_dispatcher.first == ssrc) {
++                         RTC_LOG(LS_VERBOSE)
++                             << tag
++                             << " Unregistering frame dispatcher for SSRC "
++                             << ssrc;
++                         return true;
++                       } else {
++                         return false;
++                       }
++                     }),
++      frame_dispatchers.end());
++}
++
++rtc::scoped_refptr<webrtc::TransformedFrameCallback>*
++GroupCallFrameDecryptor::GetFrameDispatcher(uint32_t const ssrc) {
++  // Deprecated
++  if (frame_dispatcher != nullptr) {
++    return &frame_dispatcher;
++  }
++
++  // Lookup frame dispatcher
++  for (auto& frame_dispatcher : frame_dispatchers) {
++    if (frame_dispatcher.first == ssrc) {
++      return &frame_dispatcher.second;
++    }
++  }
++
++  // None found
++  return nullptr;
++}
++
++/*
++ * #region GroupCallFrameEncryptorContext
++ */
++GroupCallFrameEncryptorContext::GroupCallFrameEncryptorContext(
++    uint8_t const gckh[kKeyLength])
++    : key_ctx(rtc::make_ref_counted<GroupCallFrameEncryptorKeyContext>(gckh)) {}
++
++void GroupCallFrameEncryptorContext::SetPcmk(uint8_t const pcmk[kKeyLength],
++                                             uint8_t const epoch,
++                                             uint8_t const ratchet_counter) {
++  key_ctx->SetPcmk(pcmk, epoch, ratchet_counter);
++}
++
++rtc::scoped_refptr<GroupCallFrameEncryptor>
++GroupCallFrameEncryptorContext::CreateEncryptor(std::string const tag,
++                                                Codec const codec) {
++  return rtc::make_ref_counted<GroupCallFrameEncryptor>(tag, codec, key_ctx);
++}
++
++/*
++ * #region GroupCallFrameDecryptorContext
++ */
++GroupCallFrameDecryptorContext::GroupCallFrameDecryptorContext(
++    uint8_t const gckh[kKeyLength],
++    uint16_t const participant_id)
++    : participant_id(participant_id),
++      keys_ctx(
++          rtc::make_ref_counted<GroupCallFrameDecryptorKeysContext>(gckh)) {}
++
++void GroupCallFrameDecryptorContext::AddPcmk(uint8_t const pcmk[kKeyLength],
++                                             uint8_t const epoch,
++                                             uint8_t const ratchet_counter) {
++  keys_ctx->AddPcmk(pcmk, epoch, ratchet_counter);
++}
++
++rtc::scoped_refptr<GroupCallFrameDecryptor>
++GroupCallFrameDecryptorContext::CreateDecryptor(std::string const tag,
++                                                Codec const codec) {
++  return rtc::make_ref_counted<GroupCallFrameDecryptor>(tag, codec, keys_ctx);
++}
++
++/*
++ * #region GroupCallFrameCryptoContext
++ */
++GroupCallFrameCryptoContext::GroupCallFrameCryptoContext(
++    uint8_t const gckh[kKeyLength])
++    : encryptor(std::make_unique<GroupCallFrameEncryptorContext>(gckh)) {
++  std::memcpy(this->gckh, gckh, kKeyLength);
++}
++
++GroupCallFrameEncryptorContext& GroupCallFrameCryptoContext::GetEncryptor() {
++  return *encryptor;
++}
++
++void GroupCallFrameCryptoContext::AddDecryptor(uint16_t const participant_id) {
++  // Ensure no decryptor with this participant id exists yet
++  for (auto& decryptor : decryptors) {
++    RTC_CHECK(participant_id != decryptor->participant_id);
++  }
++
++  // Create and add the decryptor
++  decryptors.push_back(
++      std::make_unique<GroupCallFrameDecryptorContext>(gckh, participant_id));
++}
++
++GroupCallFrameDecryptorContext& GroupCallFrameCryptoContext::GetDecryptor(
++    uint16_t const participant_id) {
++  // Find and return the decryptor. We assert that one must exist.
++  for (auto& decryptor : decryptors) {
++    if (participant_id == decryptor->participant_id) {
++      return *decryptor;
++    }
++  }
++  RTC_CHECK_NOTREACHED();
++}
++
++void GroupCallFrameCryptoContext::RemoveDecryptor(
++    uint16_t const participant_id) {
++  decryptors.erase(std::remove_if(
++      decryptors.begin(), decryptors.end(), [=](auto& decryptor) {
++        return participant_id == decryptor->participant_id;
++      }));
++}
++
++}  // namespace threema
+diff --git a/pc/threema_group_call_frame_transformer.h b/pc/threema_group_call_frame_transformer.h
+new file mode 100644
+index 0000000000..c43c57f4b1
+--- /dev/null
++++ b/pc/threema_group_call_frame_transformer.h
+@@ -0,0 +1,225 @@
++/*
++ * Copyright 2022 Threema GmbH. All Rights Reserved.
++ *
++ * Use of this source code is governed by a BSD-style license
++ * that can be found in the LICENSE file in the root of the source
++ * tree.
++ */
++
++#ifndef PC_THREEMA_GROUP_CALL_FRAME_TRANSFORMER_H_
++#define PC_THREEMA_GROUP_CALL_FRAME_TRANSFORMER_H_
++
++// We're using BoringSSL which gives us a tad nicer API surface, see:
++// https://commondatastorage.googleapis.com/chromium-boringssl-docs/headers.html
++#include <openssl/aead.h>
++#include <openssl/base.h>
++
++#include "absl/types/optional.h"
++#include "api/frame_transformer_interface.h"
++#include "api/scoped_refptr.h"
++#include "rtc_base/synchronization/mutex.h"
++#include "rtc_base/thread_annotations.h"
++
++constexpr size_t kHashLength = 32;
++constexpr size_t kKeyLength = 32;
++constexpr size_t kNonceLength = 12;
++constexpr size_t kBaseAdditionalDataLength = 6;
++constexpr size_t kTagLength = 16;
++
++constexpr size_t kMaxEncryptedFrameLength = 131072;
++constexpr size_t kMaxUnencryptedFrameLength =
++    kMaxEncryptedFrameLength - kTagLength - kBaseAdditionalDataLength;
++
++namespace threema {
++
++enum class Codec {
++  kOpus,
++  kVp8,
++};
++
++struct GroupCallFrameCryptoKeyState {
++  uint_fast32_t mfsn;
++  uint8_t pcmk[kKeyLength];
++  uint8_t pcmfk[kKeyLength];
++  uint_fast8_t epoch;
++  uint_fast8_t ratchet_counter;
++};
++
++struct GroupCallFrameCryptoAeadCtxState {
++  explicit GroupCallFrameCryptoAeadCtxState()
++      : initialized(false), aead_ctx({0}), epoch(0), ratchet_counter(0) {}
++
++  bool initialized;
++  EVP_AEAD_CTX aead_ctx;
++  uint_fast8_t epoch;
++  uint_fast8_t ratchet_counter;
++};
++
++struct GroupCallFrameCryptoKeyStateSnapshot {
++  uint32_t mfsn_le;
++  uint_fast8_t epoch;
++  uint_fast8_t ratchet_counter;
++};
++
++class GroupCallFrameEncryptorKeyContext : public rtc::RefCountInterface {
++ public:
++  explicit GroupCallFrameEncryptorKeyContext(uint8_t const gckh[kKeyLength]);
++
++  void SetPcmk(uint8_t const pcmk[kKeyLength],
++               uint8_t const epoch,
++               uint8_t const ratchet_counter) RTC_NO_THREAD_SAFETY_ANALYSIS;
++  absl::optional<GroupCallFrameCryptoKeyStateSnapshot> Apply(
++      GroupCallFrameCryptoAeadCtxState& aead_ctx_state,
++      EVP_AEAD const* const cipher) RTC_LOCKS_EXCLUDED(mutex);
++
++ private:
++  webrtc::Mutex mutex;
++  uint8_t gckh[kKeyLength] RTC_GUARDED_BY(mutex);
++  bool initialized RTC_GUARDED_BY(mutex) = false;
++  GroupCallFrameCryptoKeyState state RTC_GUARDED_BY(mutex);
++};
++
++class GroupCallFrameDecryptorKeysContext : public rtc::RefCountInterface {
++ public:
++  explicit GroupCallFrameDecryptorKeysContext(uint8_t const gckh[kKeyLength]);
++
++  void AddPcmk(uint8_t const pcmk[kKeyLength],
++               uint8_t const epoch,
++               uint8_t const ratchet_counter) RTC_LOCKS_EXCLUDED(mutex);
++  bool Apply(GroupCallFrameCryptoAeadCtxState& aead_ctx_state,
++             EVP_AEAD const* const cipher,
++             GroupCallFrameCryptoKeyStateSnapshot const& target)
++      RTC_LOCKS_EXCLUDED(mutex);
++
++ private:
++  absl::optional<GroupCallFrameCryptoKeyState* const> AlignWith(
++      GroupCallFrameCryptoKeyStateSnapshot const& target)
++      RTC_EXCLUSIVE_LOCKS_REQUIRED(mutex);
++
++  webrtc::Mutex mutex;
++  uint8_t gckh[kKeyLength] RTC_GUARDED_BY(mutex);
++  /** An array of PCMKs, strictly ordered by epoch, ascending. */
++  std::vector<GroupCallFrameCryptoKeyState> states RTC_GUARDED_BY(mutex);
++};
++
++class GroupCallFrameEncryptor : public webrtc::FrameTransformerInterface {
++ public:
++  explicit GroupCallFrameEncryptor(
++      std::string const tag,
++      Codec const codec,
++      rtc::scoped_refptr<GroupCallFrameEncryptorKeyContext> const key_ctx);
++  ~GroupCallFrameEncryptor() override;
++
++  void Transform(
++      std::unique_ptr<webrtc::TransformableFrameInterface> frame) override;
++  void RegisterTransformedFrameCallback(
++      rtc::scoped_refptr<webrtc::TransformedFrameCallback> const dispatcher)
++      override;
++  void RegisterTransformedFrameSinkCallback(
++      rtc::scoped_refptr<webrtc::TransformedFrameCallback> const dispatcher,
++      uint32_t const ssrc) override;
++  void UnregisterTransformedFrameCallback() override;
++  void UnregisterTransformedFrameSinkCallback(uint32_t const ssrc) override;
++
++ private:
++  rtc::scoped_refptr<webrtc::TransformedFrameCallback>* GetFrameDispatcher(
++      uint32_t const ssrc);
++
++  std::string const tag;
++  Codec const codec;
++  EVP_AEAD const* const cipher;
++  rtc::scoped_refptr<GroupCallFrameEncryptorKeyContext> const key_ctx;
++  GroupCallFrameCryptoAeadCtxState aead_ctx_state;
++  rtc::scoped_refptr<webrtc::TransformedFrameCallback> frame_dispatcher =
++      nullptr;
++  std::vector<
++      std::pair<uint32_t, rtc::scoped_refptr<webrtc::TransformedFrameCallback>>>
++      frame_dispatchers;
++};
++
++class GroupCallFrameDecryptor : public webrtc::FrameTransformerInterface {
++ public:
++  explicit GroupCallFrameDecryptor(
++      std::string const tag,
++      Codec const codec,
++      rtc::scoped_refptr<GroupCallFrameDecryptorKeysContext> const keys_ctx);
++  ~GroupCallFrameDecryptor() override;
++
++  void Transform(
++      std::unique_ptr<webrtc::TransformableFrameInterface> frame) override;
++  void RegisterTransformedFrameCallback(
++      rtc::scoped_refptr<webrtc::TransformedFrameCallback> const dispatcher)
++      override;
++  void RegisterTransformedFrameSinkCallback(
++      rtc::scoped_refptr<webrtc::TransformedFrameCallback> const dispatcher,
++      uint32_t const ssrc) override;
++  void UnregisterTransformedFrameCallback() override;
++  void UnregisterTransformedFrameSinkCallback(uint32_t const ssrc) override;
++
++ private:
++  rtc::scoped_refptr<webrtc::TransformedFrameCallback>* GetFrameDispatcher(
++      uint32_t const ssrc);
++
++  std::string const tag;
++  Codec const codec;
++  EVP_AEAD const* const cipher;
++  rtc::scoped_refptr<GroupCallFrameDecryptorKeysContext> const keys_ctx;
++  GroupCallFrameCryptoAeadCtxState aead_ctx_state;
++  rtc::scoped_refptr<webrtc::TransformedFrameCallback> frame_dispatcher =
++      nullptr;
++  std::vector<
++      std::pair<uint32_t, rtc::scoped_refptr<webrtc::TransformedFrameCallback>>>
++      frame_dispatchers;
++};
++
++class GroupCallFrameEncryptorContext {
++ public:
++  explicit GroupCallFrameEncryptorContext(uint8_t const gckh[kKeyLength]);
++
++  void SetPcmk(uint8_t const pcmk[kKeyLength],
++               uint8_t const epoch,
++               uint8_t const ratchet_counter);
++  rtc::scoped_refptr<GroupCallFrameEncryptor> CreateEncryptor(
++      std::string const tag,
++      Codec const codec);
++
++ private:
++  rtc::scoped_refptr<GroupCallFrameEncryptorKeyContext> const key_ctx;
++};
++
++class GroupCallFrameDecryptorContext {
++ public:
++  explicit GroupCallFrameDecryptorContext(uint8_t const gckh[kKeyLength],
++                                          uint16_t const participant_id);
++
++  void AddPcmk(uint8_t const pcmk[kKeyLength],
++               uint8_t const epoch,
++               uint8_t const ratchet_counter);
++  rtc::scoped_refptr<GroupCallFrameDecryptor> CreateDecryptor(
++      std::string const tag,
++      Codec const codec);
++
++  uint16_t const participant_id;
++
++ private:
++  rtc::scoped_refptr<GroupCallFrameDecryptorKeysContext> const keys_ctx;
++};
++
++class GroupCallFrameCryptoContext : public rtc::RefCountInterface {
++ public:
++  explicit GroupCallFrameCryptoContext(uint8_t const gckh[kKeyLength]);
++
++  GroupCallFrameEncryptorContext& GetEncryptor();
++  void AddDecryptor(uint16_t const participant_id);
++  GroupCallFrameDecryptorContext& GetDecryptor(uint16_t const participant_id);
++  void RemoveDecryptor(uint16_t const participant_id);
++
++ private:
++  uint8_t gckh[kKeyLength];
++  std::unique_ptr<GroupCallFrameEncryptorContext> const encryptor;
++  std::vector<std::unique_ptr<GroupCallFrameDecryptorContext>> decryptors;
++};
++
++}  // namespace threema
++
++#endif  // PC_THREEMA_GROUP_CALL_FRAME_TRANSFORMER_H_
+diff --git a/rtc_base/third_party/threema-blake2b/BUILD.gn b/rtc_base/third_party/threema-blake2b/BUILD.gn
+new file mode 100644
+index 0000000000..9080f4dd81
+--- /dev/null
++++ b/rtc_base/third_party/threema-blake2b/BUILD.gn
+@@ -0,0 +1,18 @@
++# Copyright 2022 Threema GmbH. All Rights Reserved.
++#
++# Use of this source code is governed by a BSD-style license
++# that can be found in the LICENSE file in the root of the source
++# tree.
++
++import("../../../webrtc.gni")
++
++rtc_library("threema-blake2b") {
++  visibility = [ "*" ]
++  sources = [
++    "blake2b.c",
++    "blake2b.h",
++    "ref/blake2-impl.h",
++    "ref/blake2.h",
++    "ref/blake2b-ref.c",
++  ]
++}
+\ No newline at end of file
+diff --git a/rtc_base/third_party/threema-blake2b/blake2b.c b/rtc_base/third_party/threema-blake2b/blake2b.c
+new file mode 100644
+index 0000000000..f820a97910
+--- /dev/null
++++ b/rtc_base/third_party/threema-blake2b/blake2b.c
+@@ -0,0 +1,58 @@
++/*
++ * Copyright 2022 Threema GmbH. All Rights Reserved.
++ *
++ * Use of this source code is governed by a BSD-style license
++ * that can be found in the LICENSE file in the root of the source
++ * tree.
++ */
++
++#include "blake2b.h"
++
++#include "ref/blake2-impl.h"
++#include "ref/blake2.h"
++
++// Implementation based on `blake2b_init_key`.
++int blake2b_init_with_params(blake2b_state* S,
++                             size_t outlen,
++                             const uint8_t* key,
++                             size_t keylen,
++                             const uint8_t salt[BLAKE2B_SALTBYTES],
++                             const uint8_t personal[BLAKE2B_PERSONALBYTES]) {
++  blake2b_param P[1];
++
++  if ((!outlen) || (outlen > BLAKE2B_OUTBYTES)) {
++    return -1;
++  }
++  if (!key) {
++    keylen = 0;
++  }
++  if (key && (!keylen || keylen > BLAKE2B_KEYBYTES)) {
++    return -1;
++  }
++
++  P->digest_length = (uint8_t)outlen;
++  P->key_length = (uint8_t)keylen;
++  P->fanout = 1;
++  P->depth = 1;
++  store32(&P->leaf_length, 0);
++  store32(&P->node_offset, 0);
++  store32(&P->xof_length, 0);
++  P->node_depth = 0;
++  P->inner_length = 0;
++  memset(P->reserved, 0, sizeof(P->reserved));
++  memcpy(P->salt, salt, sizeof(P->salt));
++  memcpy(P->personal, personal, sizeof(P->personal));
++
++  if (blake2b_init_param(S, P) < 0) {
++    return -1;
++  }
++
++  if (key) {
++    uint8_t block[BLAKE2B_BLOCKBYTES];
++    memset(block, 0, BLAKE2B_BLOCKBYTES);
++    memcpy(block, key, keylen);
++    blake2b_update(S, block, BLAKE2B_BLOCKBYTES);
++    secure_zero_memory(block, BLAKE2B_BLOCKBYTES); /* Burn the key from stack */
++  }
++  return 0;
++}
+diff --git a/rtc_base/third_party/threema-blake2b/blake2b.h b/rtc_base/third_party/threema-blake2b/blake2b.h
+new file mode 100644
+index 0000000000..328ae4f24c
+--- /dev/null
++++ b/rtc_base/third_party/threema-blake2b/blake2b.h
+@@ -0,0 +1,30 @@
++/*
++ * Copyright 2022 Threema GmbH. All Rights Reserved.
++ *
++ * Use of this source code is governed by a BSD-style license
++ * that can be found in the LICENSE file in the root of the source
++ * tree.
++ */
++
++#ifndef BLAKE2B_H
++#define BLAKE2B_H
++
++#include <stddef.h>
++#include <stdint.h>
++
++#include "ref/blake2.h"
++
++#if defined(__cplusplus)
++extern "C" {
++#endif
++int blake2b_init_with_params(blake2b_state* S,
++                             size_t outlen,
++                             const uint8_t* key,
++                             size_t keylen,
++                             const uint8_t salt[BLAKE2B_SALTBYTES],
++                             const uint8_t personal[BLAKE2B_PERSONALBYTES]);
++#if defined(__cplusplus)
++}
++#endif
++
++#endif
+diff --git a/rtc_base/third_party/threema-blake2b/ref/blake2-impl.h b/rtc_base/third_party/threema-blake2b/ref/blake2-impl.h
+new file mode 100644
+index 0000000000..c1df82e0c9
+--- /dev/null
++++ b/rtc_base/third_party/threema-blake2b/ref/blake2-impl.h
+@@ -0,0 +1,160 @@
++/*
++   BLAKE2 reference source code package - reference C implementations
++
++   Copyright 2012, Samuel Neves <sneves@dei.uc.pt>.  You may use this under the
++   terms of the CC0, the OpenSSL Licence, or the Apache Public License 2.0, at
++   your option.  The terms of these licenses can be found at:
++
++   - CC0 1.0 Universal : http://creativecommons.org/publicdomain/zero/1.0
++   - OpenSSL license   : https://www.openssl.org/source/license.html
++   - Apache 2.0        : http://www.apache.org/licenses/LICENSE-2.0
++
++   More information about the BLAKE2 hash function can be found at
++   https://blake2.net.
++*/
++#ifndef BLAKE2_IMPL_H
++#define BLAKE2_IMPL_H
++
++#include <stdint.h>
++#include <string.h>
++
++#if !defined(__cplusplus) && (!defined(__STDC_VERSION__) || __STDC_VERSION__ < 199901L)
++  #if   defined(_MSC_VER)
++    #define BLAKE2_INLINE __inline
++  #elif defined(__GNUC__)
++    #define BLAKE2_INLINE __inline__
++  #else
++    #define BLAKE2_INLINE
++  #endif
++#else
++  #define BLAKE2_INLINE inline
++#endif
++
++static BLAKE2_INLINE uint32_t load32( const void *src )
++{
++#if defined(NATIVE_LITTLE_ENDIAN)
++  uint32_t w;
++  memcpy(&w, src, sizeof w);
++  return w;
++#else
++  const uint8_t *p = ( const uint8_t * )src;
++  return (( uint32_t )( p[0] ) <<  0) |
++         (( uint32_t )( p[1] ) <<  8) |
++         (( uint32_t )( p[2] ) << 16) |
++         (( uint32_t )( p[3] ) << 24) ;
++#endif
++}
++
++static BLAKE2_INLINE uint64_t load64( const void *src )
++{
++#if defined(NATIVE_LITTLE_ENDIAN)
++  uint64_t w;
++  memcpy(&w, src, sizeof w);
++  return w;
++#else
++  const uint8_t *p = ( const uint8_t * )src;
++  return (( uint64_t )( p[0] ) <<  0) |
++         (( uint64_t )( p[1] ) <<  8) |
++         (( uint64_t )( p[2] ) << 16) |
++         (( uint64_t )( p[3] ) << 24) |
++         (( uint64_t )( p[4] ) << 32) |
++         (( uint64_t )( p[5] ) << 40) |
++         (( uint64_t )( p[6] ) << 48) |
++         (( uint64_t )( p[7] ) << 56) ;
++#endif
++}
++
++static BLAKE2_INLINE uint16_t load16( const void *src )
++{
++#if defined(NATIVE_LITTLE_ENDIAN)
++  uint16_t w;
++  memcpy(&w, src, sizeof w);
++  return w;
++#else
++  const uint8_t *p = ( const uint8_t * )src;
++  return ( uint16_t )((( uint32_t )( p[0] ) <<  0) |
++                      (( uint32_t )( p[1] ) <<  8));
++#endif
++}
++
++static BLAKE2_INLINE void store16( void *dst, uint16_t w )
++{
++#if defined(NATIVE_LITTLE_ENDIAN)
++  memcpy(dst, &w, sizeof w);
++#else
++  uint8_t *p = ( uint8_t * )dst;
++  *p++ = ( uint8_t )w; w >>= 8;
++  *p++ = ( uint8_t )w;
++#endif
++}
++
++static BLAKE2_INLINE void store32( void *dst, uint32_t w )
++{
++#if defined(NATIVE_LITTLE_ENDIAN)
++  memcpy(dst, &w, sizeof w);
++#else
++  uint8_t *p = ( uint8_t * )dst;
++  p[0] = (uint8_t)(w >>  0);
++  p[1] = (uint8_t)(w >>  8);
++  p[2] = (uint8_t)(w >> 16);
++  p[3] = (uint8_t)(w >> 24);
++#endif
++}
++
++static BLAKE2_INLINE void store64( void *dst, uint64_t w )
++{
++#if defined(NATIVE_LITTLE_ENDIAN)
++  memcpy(dst, &w, sizeof w);
++#else
++  uint8_t *p = ( uint8_t * )dst;
++  p[0] = (uint8_t)(w >>  0);
++  p[1] = (uint8_t)(w >>  8);
++  p[2] = (uint8_t)(w >> 16);
++  p[3] = (uint8_t)(w >> 24);
++  p[4] = (uint8_t)(w >> 32);
++  p[5] = (uint8_t)(w >> 40);
++  p[6] = (uint8_t)(w >> 48);
++  p[7] = (uint8_t)(w >> 56);
++#endif
++}
++
++static BLAKE2_INLINE uint64_t load48( const void *src )
++{
++  const uint8_t *p = ( const uint8_t * )src;
++  return (( uint64_t )( p[0] ) <<  0) |
++         (( uint64_t )( p[1] ) <<  8) |
++         (( uint64_t )( p[2] ) << 16) |
++         (( uint64_t )( p[3] ) << 24) |
++         (( uint64_t )( p[4] ) << 32) |
++         (( uint64_t )( p[5] ) << 40) ;
++}
++
++static BLAKE2_INLINE void store48( void *dst, uint64_t w )
++{
++  uint8_t *p = ( uint8_t * )dst;
++  p[0] = (uint8_t)(w >>  0);
++  p[1] = (uint8_t)(w >>  8);
++  p[2] = (uint8_t)(w >> 16);
++  p[3] = (uint8_t)(w >> 24);
++  p[4] = (uint8_t)(w >> 32);
++  p[5] = (uint8_t)(w >> 40);
++}
++
++static BLAKE2_INLINE uint32_t rotr32( const uint32_t w, const unsigned c )
++{
++  return ( w >> c ) | ( w << ( 32 - c ) );
++}
++
++static BLAKE2_INLINE uint64_t rotr64( const uint64_t w, const unsigned c )
++{
++  return ( w >> c ) | ( w << ( 64 - c ) );
++}
++
++/* prevents compiler optimizing out memset() */
++static BLAKE2_INLINE void secure_zero_memory(void *v, size_t n)
++{
++  static void *(*const volatile memset_v)(void *, int, size_t) = &memset;
++  memset_v(v, 0, n);
++}
++
++#endif
+diff --git a/rtc_base/third_party/threema-blake2b/ref/blake2.h b/rtc_base/third_party/threema-blake2b/ref/blake2.h
+new file mode 100644
+index 0000000000..ca390305e6
+--- /dev/null
++++ b/rtc_base/third_party/threema-blake2b/ref/blake2.h
+@@ -0,0 +1,195 @@
++/*
++   BLAKE2 reference source code package - reference C implementations
++
++   Copyright 2012, Samuel Neves <sneves@dei.uc.pt>.  You may use this under the
++   terms of the CC0, the OpenSSL Licence, or the Apache Public License 2.0, at
++   your option.  The terms of these licenses can be found at:
++
++   - CC0 1.0 Universal : http://creativecommons.org/publicdomain/zero/1.0
++   - OpenSSL license   : https://www.openssl.org/source/license.html
++   - Apache 2.0        : http://www.apache.org/licenses/LICENSE-2.0
++
++   More information about the BLAKE2 hash function can be found at
++   https://blake2.net.
++*/
++#ifndef BLAKE2_H
++#define BLAKE2_H
++
++#include <stddef.h>
++#include <stdint.h>
++
++#if defined(_MSC_VER)
++#define BLAKE2_PACKED(x) __pragma(pack(push, 1)) x __pragma(pack(pop))
++#else
++#define BLAKE2_PACKED(x) x __attribute__((packed))
++#endif
++
++#if defined(__cplusplus)
++extern "C" {
++#endif
++
++  enum blake2s_constant
++  {
++    BLAKE2S_BLOCKBYTES = 64,
++    BLAKE2S_OUTBYTES   = 32,
++    BLAKE2S_KEYBYTES   = 32,
++    BLAKE2S_SALTBYTES  = 8,
++    BLAKE2S_PERSONALBYTES = 8
++  };
++
++  enum blake2b_constant
++  {
++    BLAKE2B_BLOCKBYTES = 128,
++    BLAKE2B_OUTBYTES   = 64,
++    BLAKE2B_KEYBYTES   = 64,
++    BLAKE2B_SALTBYTES  = 16,
++    BLAKE2B_PERSONALBYTES = 16
++  };
++
++  typedef struct blake2s_state__
++  {
++    uint32_t h[8];
++    uint32_t t[2];
++    uint32_t f[2];
++    uint8_t  buf[BLAKE2S_BLOCKBYTES];
++    size_t   buflen;
++    size_t   outlen;
++    uint8_t  last_node;
++  } blake2s_state;
++
++  typedef struct blake2b_state__
++  {
++    uint64_t h[8];
++    uint64_t t[2];
++    uint64_t f[2];
++    uint8_t  buf[BLAKE2B_BLOCKBYTES];
++    size_t   buflen;
++    size_t   outlen;
++    uint8_t  last_node;
++  } blake2b_state;
++
++  typedef struct blake2sp_state__
++  {
++    blake2s_state S[8][1];
++    blake2s_state R[1];
++    uint8_t       buf[8 * BLAKE2S_BLOCKBYTES];
++    size_t        buflen;
++    size_t        outlen;
++  } blake2sp_state;
++
++  typedef struct blake2bp_state__
++  {
++    blake2b_state S[4][1];
++    blake2b_state R[1];
++    uint8_t       buf[4 * BLAKE2B_BLOCKBYTES];
++    size_t        buflen;
++    size_t        outlen;
++  } blake2bp_state;
++
++
++  BLAKE2_PACKED(struct blake2s_param__
++  {
++    uint8_t  digest_length; /* 1 */
++    uint8_t  key_length;    /* 2 */
++    uint8_t  fanout;        /* 3 */
++    uint8_t  depth;         /* 4 */
++    uint32_t leaf_length;   /* 8 */
++    uint32_t node_offset;  /* 12 */
++    uint16_t xof_length;    /* 14 */
++    uint8_t  node_depth;    /* 15 */
++    uint8_t  inner_length;  /* 16 */
++    /* uint8_t  reserved[0]; */
++    uint8_t  salt[BLAKE2S_SALTBYTES]; /* 24 */
++    uint8_t  personal[BLAKE2S_PERSONALBYTES];  /* 32 */
++  });
++
++  typedef struct blake2s_param__ blake2s_param;
++
++  BLAKE2_PACKED(struct blake2b_param__
++  {
++    uint8_t  digest_length; /* 1 */
++    uint8_t  key_length;    /* 2 */
++    uint8_t  fanout;        /* 3 */
++    uint8_t  depth;         /* 4 */
++    uint32_t leaf_length;   /* 8 */
++    uint32_t node_offset;   /* 12 */
++    uint32_t xof_length;    /* 16 */
++    uint8_t  node_depth;    /* 17 */
++    uint8_t  inner_length;  /* 18 */
++    uint8_t  reserved[14];  /* 32 */
++    uint8_t  salt[BLAKE2B_SALTBYTES]; /* 48 */
++    uint8_t  personal[BLAKE2B_PERSONALBYTES];  /* 64 */
++  });
++
++  typedef struct blake2b_param__ blake2b_param;
++
++  typedef struct blake2xs_state__
++  {
++    blake2s_state S[1];
++    blake2s_param P[1];
++  } blake2xs_state;
++
++  typedef struct blake2xb_state__
++  {
++    blake2b_state S[1];
++    blake2b_param P[1];
++  } blake2xb_state;
++
++  /* Padded structs result in a compile-time error */
++  enum {
++    BLAKE2_DUMMY_1 = 1/(int)(sizeof(blake2s_param) == BLAKE2S_OUTBYTES),
++    BLAKE2_DUMMY_2 = 1/(int)(sizeof(blake2b_param) == BLAKE2B_OUTBYTES)
++  };
++
++  /* Streaming API */
++  int blake2s_init( blake2s_state *S, size_t outlen );
++  int blake2s_init_key( blake2s_state *S, size_t outlen, const void *key, size_t keylen );
++  int blake2s_init_param( blake2s_state *S, const blake2s_param *P );
++  int blake2s_update( blake2s_state *S, const void *in, size_t inlen );
++  int blake2s_final( blake2s_state *S, void *out, size_t outlen );
++
++  int blake2b_init( blake2b_state *S, size_t outlen );
++  int blake2b_init_key( blake2b_state *S, size_t outlen, const void *key, size_t keylen );
++  int blake2b_init_param( blake2b_state *S, const blake2b_param *P );
++  int blake2b_update( blake2b_state *S, const void *in, size_t inlen );
++  int blake2b_final( blake2b_state *S, void *out, size_t outlen );
++
++  int blake2sp_init( blake2sp_state *S, size_t outlen );
++  int blake2sp_init_key( blake2sp_state *S, size_t outlen, const void *key, size_t keylen );
++  int blake2sp_update( blake2sp_state *S, const void *in, size_t inlen );
++  int blake2sp_final( blake2sp_state *S, void *out, size_t outlen );
++
++  int blake2bp_init( blake2bp_state *S, size_t outlen );
++  int blake2bp_init_key( blake2bp_state *S, size_t outlen, const void *key, size_t keylen );
++  int blake2bp_update( blake2bp_state *S, const void *in, size_t inlen );
++  int blake2bp_final( blake2bp_state *S, void *out, size_t outlen );
++
++  /* Variable output length API */
++  int blake2xs_init( blake2xs_state *S, const size_t outlen );
++  int blake2xs_init_key( blake2xs_state *S, const size_t outlen, const void *key, size_t keylen );
++  int blake2xs_update( blake2xs_state *S, const void *in, size_t inlen );
++  int blake2xs_final(blake2xs_state *S, void *out, size_t outlen);
++
++  int blake2xb_init( blake2xb_state *S, const size_t outlen );
++  int blake2xb_init_key( blake2xb_state *S, const size_t outlen, const void *key, size_t keylen );
++  int blake2xb_update( blake2xb_state *S, const void *in, size_t inlen );
++  int blake2xb_final(blake2xb_state *S, void *out, size_t outlen);
++
++  /* Simple API */
++  int blake2s( void *out, size_t outlen, const void *in, size_t inlen, const void *key, size_t keylen );
++  int blake2b( void *out, size_t outlen, const void *in, size_t inlen, const void *key, size_t keylen );
++
++  int blake2sp( void *out, size_t outlen, const void *in, size_t inlen, const void *key, size_t keylen );
++  int blake2bp( void *out, size_t outlen, const void *in, size_t inlen, const void *key, size_t keylen );
++
++  int blake2xs( void *out, size_t outlen, const void *in, size_t inlen, const void *key, size_t keylen );
++  int blake2xb( void *out, size_t outlen, const void *in, size_t inlen, const void *key, size_t keylen );
++
++  /* This is simply an alias for blake2b */
++  int blake2( void *out, size_t outlen, const void *in, size_t inlen, const void *key, size_t keylen );
++
++#if defined(__cplusplus)
++}
++#endif
++
++#endif
+diff --git a/rtc_base/third_party/threema-blake2b/ref/blake2b-ref.c b/rtc_base/third_party/threema-blake2b/ref/blake2b-ref.c
+new file mode 100644
+index 0000000000..cd38b1ba00
+--- /dev/null
++++ b/rtc_base/third_party/threema-blake2b/ref/blake2b-ref.c
+@@ -0,0 +1,379 @@
++/*
++   BLAKE2 reference source code package - reference C implementations
++
++   Copyright 2012, Samuel Neves <sneves@dei.uc.pt>.  You may use this under the
++   terms of the CC0, the OpenSSL Licence, or the Apache Public License 2.0, at
++   your option.  The terms of these licenses can be found at:
++
++   - CC0 1.0 Universal : http://creativecommons.org/publicdomain/zero/1.0
++   - OpenSSL license   : https://www.openssl.org/source/license.html
++   - Apache 2.0        : http://www.apache.org/licenses/LICENSE-2.0
++
++   More information about the BLAKE2 hash function can be found at
++   https://blake2.net.
++*/
++
++#include <stdint.h>
++#include <string.h>
++#include <stdio.h>
++
++#include "blake2.h"
++#include "blake2-impl.h"
++
++static const uint64_t blake2b_IV[8] =
++{
++  0x6a09e667f3bcc908ULL, 0xbb67ae8584caa73bULL,
++  0x3c6ef372fe94f82bULL, 0xa54ff53a5f1d36f1ULL,
++  0x510e527fade682d1ULL, 0x9b05688c2b3e6c1fULL,
++  0x1f83d9abfb41bd6bULL, 0x5be0cd19137e2179ULL
++};
++
++static const uint8_t blake2b_sigma[12][16] =
++{
++  {  0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15 } ,
++  { 14, 10,  4,  8,  9, 15, 13,  6,  1, 12,  0,  2, 11,  7,  5,  3 } ,
++  { 11,  8, 12,  0,  5,  2, 15, 13, 10, 14,  3,  6,  7,  1,  9,  4 } ,
++  {  7,  9,  3,  1, 13, 12, 11, 14,  2,  6,  5, 10,  4,  0, 15,  8 } ,
++  {  9,  0,  5,  7,  2,  4, 10, 15, 14,  1, 11, 12,  6,  8,  3, 13 } ,
++  {  2, 12,  6, 10,  0, 11,  8,  3,  4, 13,  7,  5, 15, 14,  1,  9 } ,
++  { 12,  5,  1, 15, 14, 13,  4, 10,  0,  7,  6,  3,  9,  2,  8, 11 } ,
++  { 13, 11,  7, 14, 12,  1,  3,  9,  5,  0, 15,  4,  8,  6,  2, 10 } ,
++  {  6, 15, 14,  9, 11,  3,  0,  8, 12,  2, 13,  7,  1,  4, 10,  5 } ,
++  { 10,  2,  8,  4,  7,  6,  1,  5, 15, 11,  9, 14,  3, 12, 13 , 0 } ,
++  {  0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15 } ,
++  { 14, 10,  4,  8,  9, 15, 13,  6,  1, 12,  0,  2, 11,  7,  5,  3 }
++};
++
++
++static void blake2b_set_lastnode( blake2b_state *S )
++{
++  S->f[1] = (uint64_t)-1;
++}
++
++/* Some helper functions, not necessarily useful */
++static int blake2b_is_lastblock( const blake2b_state *S )
++{
++  return S->f[0] != 0;
++}
++
++static void blake2b_set_lastblock( blake2b_state *S )
++{
++  if( S->last_node ) blake2b_set_lastnode( S );
++
++  S->f[0] = (uint64_t)-1;
++}
++
++static void blake2b_increment_counter( blake2b_state *S, const uint64_t inc )
++{
++  S->t[0] += inc;
++  S->t[1] += ( S->t[0] < inc );
++}
++
++static void blake2b_init0( blake2b_state *S )
++{
++  size_t i;
++  memset( S, 0, sizeof( blake2b_state ) );
++
++  for( i = 0; i < 8; ++i ) S->h[i] = blake2b_IV[i];
++}
++
++/* init xors IV with input parameter block */
++int blake2b_init_param( blake2b_state *S, const blake2b_param *P )
++{
++  const uint8_t *p = ( const uint8_t * )( P );
++  size_t i;
++
++  blake2b_init0( S );
++
++  /* IV XOR ParamBlock */
++  for( i = 0; i < 8; ++i )
++    S->h[i] ^= load64( p + sizeof( S->h[i] ) * i );
++
++  S->outlen = P->digest_length;
++  return 0;
++}
++
++
++
++int blake2b_init( blake2b_state *S, size_t outlen )
++{
++  blake2b_param P[1];
++
++  if ( ( !outlen ) || ( outlen > BLAKE2B_OUTBYTES ) ) return -1;
++
++  P->digest_length = (uint8_t)outlen;
++  P->key_length    = 0;
++  P->fanout        = 1;
++  P->depth         = 1;
++  store32( &P->leaf_length, 0 );
++  store32( &P->node_offset, 0 );
++  store32( &P->xof_length, 0 );
++  P->node_depth    = 0;
++  P->inner_length  = 0;
++  memset( P->reserved, 0, sizeof( P->reserved ) );
++  memset( P->salt,     0, sizeof( P->salt ) );
++  memset( P->personal, 0, sizeof( P->personal ) );
++  return blake2b_init_param( S, P );
++}
++
++
++int blake2b_init_key( blake2b_state *S, size_t outlen, const void *key, size_t keylen )
++{
++  blake2b_param P[1];
++
++  if ( ( !outlen ) || ( outlen > BLAKE2B_OUTBYTES ) ) return -1;
++
++  if ( !key || !keylen || keylen > BLAKE2B_KEYBYTES ) return -1;
++
++  P->digest_length = (uint8_t)outlen;
++  P->key_length    = (uint8_t)keylen;
++  P->fanout        = 1;
++  P->depth         = 1;
++  store32( &P->leaf_length, 0 );
++  store32( &P->node_offset, 0 );
++  store32( &P->xof_length, 0 );
++  P->node_depth    = 0;
++  P->inner_length  = 0;
++  memset( P->reserved, 0, sizeof( P->reserved ) );
++  memset( P->salt,     0, sizeof( P->salt ) );
++  memset( P->personal, 0, sizeof( P->personal ) );
++
++  if( blake2b_init_param( S, P ) < 0 ) return -1;
++
++  {
++    uint8_t block[BLAKE2B_BLOCKBYTES];
++    memset( block, 0, BLAKE2B_BLOCKBYTES );
++    memcpy( block, key, keylen );
++    blake2b_update( S, block, BLAKE2B_BLOCKBYTES );
++    secure_zero_memory( block, BLAKE2B_BLOCKBYTES ); /* Burn the key from stack */
++  }
++  return 0;
++}
++
++#define G(r,i,a,b,c,d)                      \
++  do {                                      \
++    a = a + b + m[blake2b_sigma[r][2*i+0]]; \
++    d = rotr64(d ^ a, 32);                  \
++    c = c + d;                              \
++    b = rotr64(b ^ c, 24);                  \
++    a = a + b + m[blake2b_sigma[r][2*i+1]]; \
++    d = rotr64(d ^ a, 16);                  \
++    c = c + d;                              \
++    b = rotr64(b ^ c, 63);                  \
++  } while(0)
++
++#define ROUND(r)                    \
++  do {                              \
++    G(r,0,v[ 0],v[ 4],v[ 8],v[12]); \
++    G(r,1,v[ 1],v[ 5],v[ 9],v[13]); \
++    G(r,2,v[ 2],v[ 6],v[10],v[14]); \
++    G(r,3,v[ 3],v[ 7],v[11],v[15]); \
++    G(r,4,v[ 0],v[ 5],v[10],v[15]); \
++    G(r,5,v[ 1],v[ 6],v[11],v[12]); \
++    G(r,6,v[ 2],v[ 7],v[ 8],v[13]); \
++    G(r,7,v[ 3],v[ 4],v[ 9],v[14]); \
++  } while(0)
++
++static void blake2b_compress( blake2b_state *S, const uint8_t block[BLAKE2B_BLOCKBYTES] )
++{
++  uint64_t m[16];
++  uint64_t v[16];
++  size_t i;
++
++  for( i = 0; i < 16; ++i ) {
++    m[i] = load64( block + i * sizeof( m[i] ) );
++  }
++
++  for( i = 0; i < 8; ++i ) {
++    v[i] = S->h[i];
++  }
++
++  v[ 8] = blake2b_IV[0];
++  v[ 9] = blake2b_IV[1];
++  v[10] = blake2b_IV[2];
++  v[11] = blake2b_IV[3];
++  v[12] = blake2b_IV[4] ^ S->t[0];
++  v[13] = blake2b_IV[5] ^ S->t[1];
++  v[14] = blake2b_IV[6] ^ S->f[0];
++  v[15] = blake2b_IV[7] ^ S->f[1];
++
++  ROUND( 0 );
++  ROUND( 1 );
++  ROUND( 2 );
++  ROUND( 3 );
++  ROUND( 4 );
++  ROUND( 5 );
++  ROUND( 6 );
++  ROUND( 7 );
++  ROUND( 8 );
++  ROUND( 9 );
++  ROUND( 10 );
++  ROUND( 11 );
++
++  for( i = 0; i < 8; ++i ) {
++    S->h[i] = S->h[i] ^ v[i] ^ v[i + 8];
++  }
++}
++
++#undef G
++#undef ROUND
++
++int blake2b_update( blake2b_state *S, const void *pin, size_t inlen )
++{
++  const unsigned char * in = (const unsigned char *)pin;
++  if( inlen > 0 )
++  {
++    size_t left = S->buflen;
++    size_t fill = BLAKE2B_BLOCKBYTES - left;
++    if( inlen > fill )
++    {
++      S->buflen = 0;
++      memcpy( S->buf + left, in, fill ); /* Fill buffer */
++      blake2b_increment_counter( S, BLAKE2B_BLOCKBYTES );
++      blake2b_compress( S, S->buf ); /* Compress */
++      in += fill; inlen -= fill;
++      while(inlen > BLAKE2B_BLOCKBYTES) {
++        blake2b_increment_counter(S, BLAKE2B_BLOCKBYTES);
++        blake2b_compress( S, in );
++        in += BLAKE2B_BLOCKBYTES;
++        inlen -= BLAKE2B_BLOCKBYTES;
++      }
++    }
++    memcpy( S->buf + S->buflen, in, inlen );
++    S->buflen += inlen;
++  }
++  return 0;
++}
++
++int blake2b_final( blake2b_state *S, void *out, size_t outlen )
++{
++  uint8_t buffer[BLAKE2B_OUTBYTES] = {0};
++  size_t i;
++
++  if( out == NULL || outlen < S->outlen )
++    return -1;
++
++  if( blake2b_is_lastblock( S ) )
++    return -1;
++
++  blake2b_increment_counter( S, S->buflen );
++  blake2b_set_lastblock( S );
++  memset( S->buf + S->buflen, 0, BLAKE2B_BLOCKBYTES - S->buflen ); /* Padding */
++  blake2b_compress( S, S->buf );
++
++  for( i = 0; i < 8; ++i ) /* Output full hash to temp buffer */
++    store64( buffer + sizeof( S->h[i] ) * i, S->h[i] );
++
++  memcpy( out, buffer, S->outlen );
++  secure_zero_memory(buffer, sizeof(buffer));
++  return 0;
++}
++
++/* inlen, at least, should be uint64_t. Others can be size_t. */
++int blake2b( void *out, size_t outlen, const void *in, size_t inlen, const void *key, size_t keylen )
++{
++  blake2b_state S[1];
++
++  /* Verify parameters */
++  if ( NULL == in && inlen > 0 ) return -1;
++
++  if ( NULL == out ) return -1;
++
++  if( NULL == key && keylen > 0 ) return -1;
++
++  if( !outlen || outlen > BLAKE2B_OUTBYTES ) return -1;
++
++  if( keylen > BLAKE2B_KEYBYTES ) return -1;
++
++  if( keylen > 0 )
++  {
++    if( blake2b_init_key( S, outlen, key, keylen ) < 0 ) return -1;
++  }
++  else
++  {
++    if( blake2b_init( S, outlen ) < 0 ) return -1;
++  }
++
++  blake2b_update( S, ( const uint8_t * )in, inlen );
++  blake2b_final( S, out, outlen );
++  return 0;
++}
++
++int blake2( void *out, size_t outlen, const void *in, size_t inlen, const void *key, size_t keylen ) {
++  return blake2b(out, outlen, in, inlen, key, keylen);
++}
++
++#if defined(SUPERCOP)
++int crypto_hash( unsigned char *out, unsigned char *in, unsigned long long inlen )
++{
++  return blake2b( out, BLAKE2B_OUTBYTES, in, inlen, NULL, 0 );
++}
++#endif
++
++#if defined(BLAKE2B_SELFTEST)
++#include <string.h>
++#include "blake2-kat.h"
++int main( void )
++{
++  uint8_t key[BLAKE2B_KEYBYTES];
++  uint8_t buf[BLAKE2_KAT_LENGTH];
++  size_t i, step;
++
++  for( i = 0; i < BLAKE2B_KEYBYTES; ++i )
++    key[i] = ( uint8_t )i;
++
++  for( i = 0; i < BLAKE2_KAT_LENGTH; ++i )
++    buf[i] = ( uint8_t )i;
++
++  /* Test simple API */
++  for( i = 0; i < BLAKE2_KAT_LENGTH; ++i )
++  {
++    uint8_t hash[BLAKE2B_OUTBYTES];
++    blake2b( hash, BLAKE2B_OUTBYTES, buf, i, key, BLAKE2B_KEYBYTES );
++
++    if( 0 != memcmp( hash, blake2b_keyed_kat[i], BLAKE2B_OUTBYTES ) )
++    {
++      goto fail;
++    }
++  }
++
++  /* Test streaming API */
++  for(step = 1; step < BLAKE2B_BLOCKBYTES; ++step) {
++    for (i = 0; i < BLAKE2_KAT_LENGTH; ++i) {
++      uint8_t hash[BLAKE2B_OUTBYTES];
++      blake2b_state S;
++      uint8_t * p = buf;
++      size_t mlen = i;
++      int err = 0;
++
++      if( (err = blake2b_init_key(&S, BLAKE2B_OUTBYTES, key, BLAKE2B_KEYBYTES)) < 0 ) {
++        goto fail;
++      }
++
++      while (mlen >= step) {
++        if ( (err = blake2b_update(&S, p, step)) < 0 ) {
++          goto fail;
++        }
++        mlen -= step;
++        p += step;
++      }
++      if ( (err = blake2b_update(&S, p, mlen)) < 0) {
++        goto fail;
++      }
++      if ( (err = blake2b_final(&S, hash, BLAKE2B_OUTBYTES)) < 0) {
++        goto fail;
++      }
++
++      if (0 != memcmp(hash, blake2b_keyed_kat[i], BLAKE2B_OUTBYTES)) {
++        goto fail;
++      }
++    }
++  }
++
++  puts( "ok" );
++  return 0;
++fail:
++  puts("error");
++  return -1;
++}
++#endif
+diff --git a/sdk/android/BUILD.gn b/sdk/android/BUILD.gn
+index b3f641a2f7..a4730fd281 100644
+--- a/sdk/android/BUILD.gn
++++ b/sdk/android/BUILD.gn
+@@ -300,6 +300,7 @@ if (is_android) {
+       "api/org/webrtc/VideoProcessor.java",
+       "api/org/webrtc/VideoSource.java",
+       "api/org/webrtc/VideoTrack.java",
++      "api/org/webrtc/ThreemaGroupCallFrameCryptoContext.java",
+       "src/java/org/webrtc/NativeAndroidVideoTrackSource.java",
+       "src/java/org/webrtc/NativeCapturerObserver.java",
+       "src/java/org/webrtc/NativeLibrary.java",
+@@ -755,9 +756,12 @@ if (current_os == "linux" || is_android) {
+       "src/jni/pc/stats_observer.h",
+       "src/jni/pc/turn_customizer.cc",
+       "src/jni/pc/turn_customizer.h",
++      "src/jni/pc/threema_group_call_frame_crypto_context.cc",
++      "src/jni/pc/threema_group_call_frame_crypto_context.h",
+     ]
+ 
+     deps = [
++      "//third_party/boringssl",
+       ":base_jni",
+       ":generated_external_classes_jni",
+       ":generated_peerconnection_jni",
+@@ -775,6 +779,7 @@ if (current_os == "linux" || is_android) {
+       "../../api/rtc_event_log:rtc_event_log_factory",
+       "../../api/task_queue:default_task_queue_factory",
+       "../../api/video_codecs:video_codecs_api",
++      "../../api:frame_transformer_interface",
+       "../../call:call_interfaces",
+       "../../media:rtc_audio_video",
+       "../../media:rtc_media_base",
+@@ -782,6 +787,7 @@ if (current_os == "linux" || is_android) {
+       "../../modules/audio_processing:api",
+       "../../modules/utility",
+       "../../pc:media_stream_observer",
++      "../../pc:threema_group_call_frame_transformer",
+       "../../pc:webrtc_sdp",
+       "../../rtc_base",
+       "../../rtc_base:checks",
+@@ -1385,6 +1391,7 @@ if (current_os == "linux" || is_android) {
+       "api/org/webrtc/StatsObserver.java",
+       "api/org/webrtc/StatsReport.java",
+       "api/org/webrtc/TurnCustomizer.java",
++      "api/org/webrtc/ThreemaGroupCallFrameCryptoContext.java",
+     ]
+     namespace = "webrtc::jni"
+     jni_generator_include = "//sdk/android/src/jni/jni_generator_helper.h"
+diff --git a/sdk/android/api/org/webrtc/RtpReceiver.java b/sdk/android/api/org/webrtc/RtpReceiver.java
+index a5710f92e3..dcec8860e3 100644
+--- a/sdk/android/api/org/webrtc/RtpReceiver.java
++++ b/sdk/android/api/org/webrtc/RtpReceiver.java
+@@ -61,6 +61,12 @@ public class RtpReceiver {
+     nativeRtpReceiver = 0;
+   }
+ 
++  /** Returns a pointer to webrtc::RtpSenderInterface. */
++  long getNativeRtpReceiver() {
++    checkRtpReceiverExists();
++    return nativeRtpReceiver;
++  }
++
+   public void SetObserver(Observer observer) {
+     checkRtpReceiverExists();
+     // Unset the existing one before setting a new one.
+diff --git a/sdk/android/api/org/webrtc/ThreemaGroupCallFrameCryptoContext.java b/sdk/android/api/org/webrtc/ThreemaGroupCallFrameCryptoContext.java
+new file mode 100644
+index 0000000000..005cd5e81c
+--- /dev/null
++++ b/sdk/android/api/org/webrtc/ThreemaGroupCallFrameCryptoContext.java
+@@ -0,0 +1,162 @@
++/*
++ * Copyright 2022 Threema GmbH. All Rights Reserved.
++ *
++ * Use of this source code is governed by a BSD-style license
++ * that can be found in the LICENSE file in the root of the source
++ * tree.
++ */
++
++package org.webrtc;
++
++import java.util.HashMap;
++import java.util.Map;
++import androidx.annotation.NonNull;
++import androidx.annotation.Nullable;
++
++/**
++ * IMPORTANT: This is **NOT** thread safe. It is your job to always call it from
++ *            the same thread or use synchronisation primitives.
++ */
++public class ThreemaGroupCallFrameCryptoContext {
++  private static native long nativeCreate(@NonNull byte[] gckh);
++
++  private static native void nativeEncryptorSetPcmk(long context, @NonNull byte[] pcmk, short epoch, short ratchetCounter);
++  private static native void nativeEncryptorAttach(long context, long nativeRtpSender, @NonNull String tag);
++
++  private static native void nativeDecryptorAdd(long context, short participantId);
++  private static native void nativeDecryptorRemove(long context, short participantId);
++  private static native void nativeDecryptorAddPcmk(long context, short participantId, @NonNull byte[] pcmk, short epoch, short ratchetCounter);
++  private static native void nativeDecryptorAttach(long context, short participantId, long nativeRtpReceiver, @NonNull String tag);
++
++  private static short MIDS_MAX = 790;
++
++  private static void validateMediaKeys(@NonNull byte[] pcmk, short epoch, short ratchetCounter) {
++    if (pcmk.length != 32) {
++      throw new IllegalArgumentException("'pcmk' must be 32 bytes");
++    }
++    if (epoch < 0 || epoch > 255) {
++      throw new IllegalArgumentException("'epoch' must be a u8");
++    }
++    if (ratchetCounter < 0 || ratchetCounter > 255) {
++      throw new IllegalArgumentException("'ratchetCounter' must be a u8");
++    }
++  }
++
++  private static void validateParticipantId(short participantId) {
++    if (participantId < 0 || participantId >= MIDS_MAX) {
++      throw new IllegalArgumentException("'participantId' must be >= 0 and < MIDS_MAX");
++    }
++  }
++
++  /** Encrypts outgoing audio/video frames. */
++  public class Encryptor {
++    private Encryptor() {}
++
++    /** Initialise or update the key material of the encryptor. */
++    public void setPcmk(@NonNull byte[] pcmk, short epoch, short ratchetCounter) {
++      validateMediaKeys(pcmk, epoch, ratchetCounter);
++      nativeEncryptorSetPcmk(nativeContext, pcmk, epoch, ratchetCounter);
++    }
++
++    /** Attach an RTP sender to the encryptor, encrypting all upcoming audio/video frames. */
++    public void attach(@NonNull RtpSender sender, @NonNull String tag) {
++      final long nativeSender = sender.getNativeRtpSender();
++      nativeEncryptorAttach(ensureContext(), nativeSender, tag);
++    }
++  }
++
++  /** Decrypts incoming audio/video frames of another participant. */
++  public class Decryptor {
++    public final short participantId;
++    private boolean active = true;
++
++    private Decryptor(short participantId) {
++      validateParticipantId(participantId);
++      this.participantId = participantId;
++      nativeDecryptorAdd(ensureContext(), participantId);
++    }
++
++    /** Initialise or update the key material of the decryptor. */
++    public void addPcmk(@NonNull byte[] pcmk, short epoch, short ratchetCounter) {
++      ensureActive();
++      validateMediaKeys(pcmk, epoch, ratchetCounter);
++      nativeDecryptorAddPcmk(nativeContext, participantId, pcmk, epoch, ratchetCounter);
++    }
++
++    /** Attach an RTP receiver to the decryptor, decrypting all upcoming audio/video frames. */
++    public void attach(@NonNull RtpReceiver receiver, @NonNull String tag) {
++      ensureActive();
++      final long nativeReceiver = receiver.getNativeRtpReceiver();
++      nativeDecryptorAttach(ensureContext(), participantId, nativeReceiver, tag);
++    }
++
++    private void ensureActive() {
++      if (!active) {
++        throw new IllegalStateException("Decryptor has been remove");
++      }
++    }
++
++    /** Remove the decryptor. Note that it doesn't detach from the RTP receiver for simplicity. */
++    private void remove() {
++      ensureActive();
++      nativeDecryptorRemove(ensureContext(), participantId);
++      active = false;
++    }
++  }
++
++  private long nativeContext;
++  private @NonNull final Encryptor encryptor;
++  private @NonNull final Map<Short, Decryptor> decryptors = new HashMap<>();
++
++  public ThreemaGroupCallFrameCryptoContext(@NonNull byte[] gckh) {
++    nativeContext = nativeCreate(gckh);
++    encryptor = new Encryptor();
++  }
++
++  public @NonNull Encryptor getEncryptor() {
++    ensureContext();
++    return encryptor;
++  }
++
++  public @Nullable Decryptor getDecryptor(short participantId) {
++    ensureContext();
++    return decryptors.get(participantId);
++  }
++
++  public @NonNull Decryptor addDecryptor(short participantId) {
++    ensureContext();
++    if (decryptors.containsKey(participantId)) {
++      throw new IllegalArgumentException("Decryptor for the given participant id already existing");
++    }
++    final Decryptor decryptor = new Decryptor(participantId);
++    decryptors.put(participantId, decryptor);
++    return decryptor;
++  }
++
++  public void removeDecryptor(short participantId) {
++    ensureContext();
++    final Decryptor decryptor = decryptors.remove(participantId);
++    if (decryptor != null) {
++      decryptor.remove();
++    }
++  }
++
++  public void dispose() {
++    if (nativeContext == 0) {
++      return;
++    }
++    for (final Decryptor decryptor : decryptors.values()) {
++      decryptor.remove();
++    };
++    decryptors.clear();
++    JniCommon.nativeReleaseRef(nativeContext);
++    nativeContext = 0;
++  }
++
++  private long ensureContext() {
++    if (nativeContext == 0) {
++      throw new IllegalStateException("ThreemaGroupCallFrameCryptoContext has been disposed");
++    }
++    return nativeContext;
++  }
++};
+diff --git a/sdk/android/src/jni/pc/threema_group_call_frame_crypto_context.cc b/sdk/android/src/jni/pc/threema_group_call_frame_crypto_context.cc
+new file mode 100644
+index 0000000000..fc4ee18ffd
+--- /dev/null
++++ b/sdk/android/src/jni/pc/threema_group_call_frame_crypto_context.cc
+@@ -0,0 +1,138 @@
++/*
++ * Copyright 2022 Threema GmbH. All Rights Reserved.
++ *
++ * Use of this source code is governed by a BSD-style license
++ * that can be found in the LICENSE file in the root of the source
++ * tree.
++ */
++
++#include "sdk/android/src/jni/pc/threema_group_call_frame_crypto_context.h"
++
++#include "api/make_ref_counted.h"
++#include "api/rtp_receiver_interface.h"
++#include "api/rtp_sender_interface.h"
++#include "pc/threema_group_call_frame_transformer.h"
++#include "rtc_base/ref_count.h"
++#include "sdk/android/generated_peerconnection_jni/ThreemaGroupCallFrameCryptoContext_jni.h"
++#include "sdk/android/native_api/jni/java_types.h"
++#include "sdk/android/src/jni/jni_helpers.h"
++
++namespace webrtc {
++namespace jni {
++
++static threema::Codec GetCodec(cricket::MediaType media_type) {
++  // Determine codec
++  //
++  // Note: This is making an assumption that audio is always Opus and video is
++  // always VP8. If this ever changes, you will have to provide those
++  // parameters.
++  switch (media_type) {
++    case cricket::MediaType::MEDIA_TYPE_AUDIO:
++      return threema::Codec::kOpus;
++    case cricket::MediaType::MEDIA_TYPE_VIDEO:
++      return threema::Codec::kVp8;
++    default:
++      RTC_CHECK_NOTREACHED();
++  }
++}
++
++static jlong JNI_ThreemaGroupCallFrameCryptoContext_Create(
++    JNIEnv* jni,
++    const base::android::JavaParamRef<jbyteArray>& j_gckh) {
++  auto* gckh = jni->GetByteArrayElements(j_gckh.obj(), nullptr);
++  auto context = rtc::make_ref_counted<threema::GroupCallFrameCryptoContext>(
++      reinterpret_cast<uint8_t* const>(gckh));
++  // Note: Ownership is moved to the Java object.
++  return jlongFromPointer(context.release());
++}
++
++// IMPORTANT: Caller must ensure that `j_pcmk` is exactly 32 bytes and
++// `j_epoch` and `j_ratchet_counter` can be safely casted to u8!
++static void JNI_ThreemaGroupCallFrameCryptoContext_EncryptorSetPcmk(
++    JNIEnv* jni,
++    jlong j_context_pointer,
++    const base::android::JavaParamRef<jbyteArray>& j_pcmk,
++    jshort j_epoch,
++    jshort j_ratchet_counter) {
++  auto* pcmk = jni->GetByteArrayElements(j_pcmk.obj(), nullptr);
++  auto* context = reinterpret_cast<threema::GroupCallFrameCryptoContext*>(
++      j_context_pointer);
++  context->GetEncryptor().SetPcmk(reinterpret_cast<uint8_t* const>(pcmk),
++                                  (uint8_t)j_epoch, (uint8_t)j_ratchet_counter);
++}
++
++static void JNI_ThreemaGroupCallFrameCryptoContext_EncryptorAttach(
++    JNIEnv* jni,
++    jlong j_context_pointer,
++    jlong j_rtp_sender_pointer,
++    const JavaParamRef<jstring>& j_tag) {
++  auto* sender = reinterpret_cast<RtpSenderInterface*>(j_rtp_sender_pointer);
++  auto tag = JavaToNativeString(jni, j_tag);
++  auto* context = reinterpret_cast<threema::GroupCallFrameCryptoContext*>(
++      j_context_pointer);
++  auto transformer = context->GetEncryptor().CreateEncryptor(
++      tag, GetCodec(sender->media_type()));
++  sender->SetEncoderToPacketizerFrameTransformer(std::move(transformer));
++}
++
++// IMPORTANT: Caller must ensure that `j_participant_id` is a valid participant
++// id!
++static void JNI_ThreemaGroupCallFrameCryptoContext_DecryptorAdd(
++    JNIEnv* jni,
++    jlong j_context_pointer,
++    jshort j_participant_id) {
++  auto* context = reinterpret_cast<threema::GroupCallFrameCryptoContext*>(
++      j_context_pointer);
++  context->AddDecryptor((uint16_t)j_participant_id);
++}
++
++// IMPORTANT: Caller must ensure that `j_participant_id` is a valid participant
++// id!
++static void JNI_ThreemaGroupCallFrameCryptoContext_DecryptorRemove(
++    JNIEnv* jni,
++    jlong j_context_pointer,
++    jshort j_participant_id) {
++  auto* context = reinterpret_cast<threema::GroupCallFrameCryptoContext*>(
++      j_context_pointer);
++  context->RemoveDecryptor((uint16_t)j_participant_id);
++}
++
++// IMPORTANT: Caller must ensure that `j_participant_id` is a valid participant
++// id, `j_pcmk` is exactly 32 bytes and `j_epoch` and `j_ratchet_counter` can be
++// safely casted to u8!!
++static void JNI_ThreemaGroupCallFrameCryptoContext_DecryptorAddPcmk(
++    JNIEnv* jni,
++    jlong j_context_pointer,
++    jshort j_participant_id,
++    const base::android::JavaParamRef<jbyteArray>& j_pcmk,
++    jshort j_epoch,
++    jshort j_ratchet_counter) {
++  auto* pcmk = jni->GetByteArrayElements(j_pcmk.obj(), nullptr);
++  auto* context = reinterpret_cast<threema::GroupCallFrameCryptoContext*>(
++      j_context_pointer);
++  context->GetDecryptor((uint16_t)j_participant_id)
++      .AddPcmk(reinterpret_cast<uint8_t* const>(pcmk), (uint8_t)j_epoch,
++               (uint8_t)j_ratchet_counter);
++}
++
++// IMPORTANT: Caller must ensure that `j_participant_id` is a valid participant
++// id!
++static void JNI_ThreemaGroupCallFrameCryptoContext_DecryptorAttach(
++    JNIEnv* jni,
++    jlong j_context_pointer,
++    jshort j_participant_id,
++    jlong j_rtp_receiver_pointer,
++    const JavaParamRef<jstring>& j_tag) {
++  auto* receiver =
++      reinterpret_cast<RtpReceiverInterface*>(j_rtp_receiver_pointer);
++  auto tag = JavaToNativeString(jni, j_tag);
++  auto* context = reinterpret_cast<threema::GroupCallFrameCryptoContext*>(
++      j_context_pointer);
++  auto transformer =
++      context->GetDecryptor((uint16_t)j_participant_id)
++          .CreateDecryptor(tag, GetCodec(receiver->media_type()));
++  receiver->SetDepacketizerToDecoderFrameTransformer(std::move(transformer));
++}
++
++}  // namespace jni
++}  // namespace webrtc
+diff --git a/sdk/android/src/jni/pc/threema_group_call_frame_crypto_context.h b/sdk/android/src/jni/pc/threema_group_call_frame_crypto_context.h
+new file mode 100644
+index 0000000000..9ef6d20ee9
+--- /dev/null
++++ b/sdk/android/src/jni/pc/threema_group_call_frame_crypto_context.h
+@@ -0,0 +1,23 @@
++/*
++ * Copyright 2022 Threema GmbH. All Rights Reserved.
++ *
++ * Use of this source code is governed by a BSD-style license
++ * that can be found in the LICENSE file in the root of the source
++ * tree.
++ */
++
++#ifndef SDK_ANDROID_SRC_JNI_PC_THREEMA_GROUP_CALL_FRAME_CRYPTO_CONTEXT_H_
++#define SDK_ANDROID_SRC_JNI_PC_THREEMA_GROUP_CALL_FRAME_CRYPTO_CONTEXT_H_
++
++#include <jni.h>
++
++#include "pc/threema_group_call_frame_transformer.h"
++#include "sdk/android/native_api/jni/scoped_java_ref.h"
++
++namespace webrtc {
++namespace jni {
++
++}  // namespace jni
++}  // namespace webrtc
++
++#endif  // SDK_ANDROID_SRC_JNI_PC_THREEMA_GROUP_CALL_FRAME_CRYPTO_CONTEXT_H_
