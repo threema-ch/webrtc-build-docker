@@ -28,7 +28,7 @@ ARG USERNAME=docker-webrtc
 ARG UID=1000
 ARG GID=1000
 RUN groupadd -g $GID -o $USERNAME && \
-    useradd -m -u $UID -g $GID -o -s /bin/bash $USERNAME && \
+    useradd -l -m -u $UID -g $GID -o -s /bin/bash $USERNAME && \
     usermod -a -G sudo $USERNAME && \
     echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
 
