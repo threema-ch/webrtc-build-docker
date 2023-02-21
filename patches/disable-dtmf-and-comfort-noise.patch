@@ -1,5 +1,5 @@
 diff --git a/media/engine/webrtc_voice_engine.cc b/media/engine/webrtc_voice_engine.cc
-index e090fcf62f..7b3d904d6e 100644
+index b6296a1993..3db9d6a7cf 100644
 --- a/media/engine/webrtc_voice_engine.cc
 +++ b/media/engine/webrtc_voice_engine.cc
 @@ -647,13 +647,6 @@ std::vector<AudioCodec> WebRtcVoiceEngine::CollectCodecs(
@@ -59,7 +59,7 @@ index e090fcf62f..7b3d904d6e 100644
    return out;
  }
  
-@@ -1632,20 +1596,6 @@ bool WebRtcVoiceMediaChannel::SetSendCodecs(
+@@ -1631,20 +1595,6 @@ bool WebRtcVoiceMediaChannel::SetSendCodecs(
      }
    }
  
@@ -80,7 +80,7 @@ index e090fcf62f..7b3d904d6e 100644
    // Scan through the list to figure out the codec to use for sending.
    absl::optional<webrtc::AudioSendStream::Config::SendCodecSpec>
        send_codec_spec;
-@@ -1684,36 +1634,6 @@ bool WebRtcVoiceMediaChannel::SetSendCodecs(
+@@ -1683,36 +1633,6 @@ bool WebRtcVoiceMediaChannel::SetSendCodecs(
    }
  
    RTC_DCHECK(voice_codec_info);
@@ -118,15 +118,19 @@ index e090fcf62f..7b3d904d6e 100644
    // Loop through the codecs to find the RED codec that matches opus
    // with respect to clockrate and number of channels.
 diff --git a/sdk/android/api/org/webrtc/RtpSender.java b/sdk/android/api/org/webrtc/RtpSender.java
-index b78bbf6b3c..e16731e207 100644
+index 2d0bc6c1e1..377ec15970 100644
 --- a/sdk/android/api/org/webrtc/RtpSender.java
 +++ b/sdk/android/api/org/webrtc/RtpSender.java
-@@ -27,8 +27,7 @@ public class RtpSender {
+@@ -28,12 +28,7 @@ public class RtpSender {
      long nativeTrack = nativeGetTrack(nativeRtpSender);
      cachedTrack = MediaStreamTrack.createMediaStreamTrack(nativeTrack);
  
--    long nativeDtmfSender = nativeGetDtmfSender(nativeRtpSender);
--    dtmfSender = (nativeDtmfSender != 0) ? new DtmfSender(nativeDtmfSender) : null;
+-    if (nativeGetMediaType(nativeRtpSender).equalsIgnoreCase(MediaStreamTrack.AUDIO_TRACK_KIND)) {
+-      long nativeDtmfSender = nativeGetDtmfSender(nativeRtpSender);
+-      dtmfSender = (nativeDtmfSender != 0) ? new DtmfSender(nativeDtmfSender) : null;
+-    } else {
+-      dtmfSender = null;
+-    }
 +    dtmfSender = null;
    }
  
