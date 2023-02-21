@@ -95,7 +95,7 @@ case ${1-} in
             echo 'Checking out revision $revision'
             cd src && git checkout $revision && cd -
             echo 'Updating third party repos and running pre-compile hooks'
-            gclient sync
+            gclient sync -D
         "
         ;;
     
@@ -116,7 +116,7 @@ case ${1-} in
             echo \"Updating current branch (\$(cd src && git branch --show-current))\"
             (cd src && git rebase-update --current)
             echo 'Updating third party repos and running pre-compile hooks'
-            gclient sync
+            gclient sync -D
             echo 'Done. Any patches and uncommited changes to libwebrtc need to be reapplied.'
         "
         ;;
