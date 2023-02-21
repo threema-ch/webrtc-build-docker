@@ -1,4 +1,5 @@
 *.swp
+.vscode/
 out/
 out-*/
 webrtc/

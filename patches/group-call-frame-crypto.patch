@@ -1,8 +1,8 @@
 diff --git a/pc/BUILD.gn b/pc/BUILD.gn
-index 26a044b615..933c4ce2e2 100644
+index 15c87dda25..1b2098e4dd 100644
 --- a/pc/BUILD.gn
 +++ b/pc/BUILD.gn
-@@ -1220,6 +1220,28 @@ rtc_source_set("peer_connection") {
+@@ -1224,6 +1224,28 @@ rtc_source_set("peer_connection") {
    ]
  }
  
@@ -1958,7 +1958,7 @@ index 0000000000..cd38b1ba00
 +}
 +#endif
 diff --git a/sdk/android/BUILD.gn b/sdk/android/BUILD.gn
-index b3f641a2f7..a4730fd281 100644
+index 8ef08a3a5b..4a6d8a08d6 100644
 --- a/sdk/android/BUILD.gn
 +++ b/sdk/android/BUILD.gn
 @@ -300,6 +300,7 @@ if (is_android) {
@@ -1969,7 +1969,7 @@ index b3f641a2f7..a4730fd281 100644
        "src/java/org/webrtc/NativeAndroidVideoTrackSource.java",
        "src/java/org/webrtc/NativeCapturerObserver.java",
        "src/java/org/webrtc/NativeLibrary.java",
-@@ -755,9 +756,12 @@ if (current_os == "linux" || is_android) {
+@@ -754,9 +755,12 @@ if (current_os == "linux" || is_android) {
        "src/jni/pc/stats_observer.h",
        "src/jni/pc/turn_customizer.cc",
        "src/jni/pc/turn_customizer.h",
@@ -1982,7 +1982,7 @@ index b3f641a2f7..a4730fd281 100644
        ":base_jni",
        ":generated_external_classes_jni",
        ":generated_peerconnection_jni",
-@@ -775,6 +779,7 @@ if (current_os == "linux" || is_android) {
+@@ -776,6 +780,7 @@ if (current_os == "linux" || is_android) {
        "../../api/rtc_event_log:rtc_event_log_factory",
        "../../api/task_queue:default_task_queue_factory",
        "../../api/video_codecs:video_codecs_api",
@@ -1990,7 +1990,7 @@ index b3f641a2f7..a4730fd281 100644
        "../../call:call_interfaces",
        "../../media:rtc_audio_video",
        "../../media:rtc_media_base",
-@@ -782,6 +787,7 @@ if (current_os == "linux" || is_android) {
+@@ -783,6 +788,7 @@ if (current_os == "linux" || is_android) {
        "../../modules/audio_processing:api",
        "../../modules/utility",
        "../../pc:media_stream_observer",
@@ -1998,7 +1998,7 @@ index b3f641a2f7..a4730fd281 100644
        "../../pc:webrtc_sdp",
        "../../rtc_base",
        "../../rtc_base:checks",
-@@ -1385,6 +1391,7 @@ if (current_os == "linux" || is_android) {
+@@ -1407,6 +1413,7 @@ if (current_os == "linux" || is_android) {
        "api/org/webrtc/StatsObserver.java",
        "api/org/webrtc/StatsReport.java",
        "api/org/webrtc/TurnCustomizer.java",
@@ -2006,23 +2006,6 @@ index b3f641a2f7..a4730fd281 100644
      ]
      namespace = "webrtc::jni"
      jni_generator_include = "//sdk/android/src/jni/jni_generator_helper.h"
-diff --git a/sdk/android/api/org/webrtc/RtpReceiver.java b/sdk/android/api/org/webrtc/RtpReceiver.java
-index a5710f92e3..dcec8860e3 100644
---- a/sdk/android/api/org/webrtc/RtpReceiver.java
-+++ b/sdk/android/api/org/webrtc/RtpReceiver.java
-@@ -61,6 +61,12 @@ public class RtpReceiver {
-     nativeRtpReceiver = 0;
-   }
- 
-+  /** Returns a pointer to webrtc::RtpSenderInterface. */
-+  long getNativeRtpReceiver() {
-+    checkRtpReceiverExists();
-+    return nativeRtpReceiver;
-+  }
-+
-   public void SetObserver(Observer observer) {
-     checkRtpReceiverExists();
-     // Unset the existing one before setting a new one.
 diff --git a/sdk/android/api/org/webrtc/ThreemaGroupCallFrameCryptoContext.java b/sdk/android/api/org/webrtc/ThreemaGroupCallFrameCryptoContext.java
 new file mode 100644
 index 0000000000..005cd5e81c

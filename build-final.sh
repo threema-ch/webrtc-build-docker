@@ -3,7 +3,7 @@ set -euo pipefail
 
 IMAGE=threema/webrtc-build-tools:latest
 TARGETS="${WEBRTC_TARGETS:-arm arm64 x86 x64}"
-BUILD_ARGS="${WEBRTC_BUILD_ARGS:-symbol_level=1 enable_libaom=false}"
+BUILD_ARGS="${WEBRTC_BUILD_ARGS:-symbol_level=1 enable_libaom=false rtc_include_dav1d_in_internal_decoder_factory=false rtc_include_ilbc=false}"
 
 if [ $# -ne 1 ]; then
     echo "Usage: $0 <revision>"

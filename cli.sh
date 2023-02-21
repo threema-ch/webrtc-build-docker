@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 TARGETS="${WEBRTC_TARGETS:-arm arm64 x86 x64}"
-BUILD_ARGS="${WEBRTC_BUILD_ARGS:-symbol_level=1 enable_libaom=false}"
+BUILD_ARGS="${WEBRTC_BUILD_ARGS:-symbol_level=1 enable_libaom=false rtc_include_dav1d_in_internal_decoder_factory=false rtc_include_ilbc=false}"
 
 function print_usage {
     echo "Usage: $0 <command> [<args>]"
@@ -95,7 +95,7 @@ case ${1-} in
             echo 'Checking out revision $revision'
             cd src && git checkout $revision && cd -
             echo 'Updating third party repos and running pre-compile hooks'
-            gclient sync
+            gclient sync -D
         "
         ;;
     
@@ -116,7 +116,7 @@ case ${1-} in
             echo \"Updating current branch (\$(cd src && git branch --show-current))\"
             (cd src && git rebase-update --current)
             echo 'Updating third party repos and running pre-compile hooks'
-            gclient sync
+            gclient sync -D
             echo 'Done. Any patches and uncommited changes to libwebrtc need to be reapplied.'
         "
         ;;
