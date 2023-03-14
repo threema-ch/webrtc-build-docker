@@ -1,0 +1,212 @@
+diff --git a/rtc_base/rtc_certificate.cc b/rtc_base/rtc_certificate.cc
+index e0b6b3258e..508652c3f0 100644
+--- a/rtc_base/rtc_certificate.cc
++++ b/rtc_base/rtc_certificate.cc
+@@ -14,6 +14,7 @@
+ 
+ #include "rtc_base/checks.h"
+ #include "rtc_base/ssl_certificate.h"
++#include "rtc_base/ssl_fingerprint.h"
+ #include "rtc_base/ssl_identity.h"
+ #include "rtc_base/time_utils.h"
+ 
+@@ -53,8 +54,10 @@ const SSLCertChain& RTCCertificate::GetSSLCertificateChain() const {
+ }
+ 
+ RTCCertificatePEM RTCCertificate::ToPEM() const {
++  std::string fingerprint =
++      SSLFingerprint::CreateFromCertificate(*this).get()->ToString();
+   return RTCCertificatePEM(identity_->PrivateKeyToPEMString(),
+-                           GetSSLCertificate().ToPEMString());
++                           GetSSLCertificate().ToPEMString(), fingerprint);
+ }
+ 
+ scoped_refptr<RTCCertificate> RTCCertificate::FromPEM(
+diff --git a/rtc_base/rtc_certificate.h b/rtc_base/rtc_certificate.h
+index 67c5c29a89..3914535792 100644
+--- a/rtc_base/rtc_certificate.h
++++ b/rtc_base/rtc_certificate.h
+@@ -37,15 +37,20 @@ class SSLIdentity;
+ class RTCCertificatePEM {
+  public:
+   RTCCertificatePEM(absl::string_view private_key,
+-                    absl::string_view certificate)
+-      : private_key_(private_key), certificate_(certificate) {}
++                    absl::string_view certificate,
++                    absl::string_view fingerprint)
++      : private_key_(private_key),
++        certificate_(certificate),
++        fingerprint_(fingerprint) {}
+ 
+   const std::string& private_key() const { return private_key_; }
+   const std::string& certificate() const { return certificate_; }
++  const std::string& fingerprint() const { return fingerprint_; }
+ 
+  private:
+   std::string private_key_;
+   std::string certificate_;
++  std::string fingerprint_;
+ };
+ 
+ // A thin abstraction layer between "lower level crypto stuff" like
+diff --git a/sdk/android/api/org/webrtc/RtcCertificatePem.java b/sdk/android/api/org/webrtc/RtcCertificatePem.java
+index 6070135b3e..ab7a07a516 100644
+--- a/sdk/android/api/org/webrtc/RtcCertificatePem.java
++++ b/sdk/android/api/org/webrtc/RtcCertificatePem.java
+@@ -20,14 +20,17 @@ public class RtcCertificatePem {
+   public final String privateKey;
+   /** PEM string representation of the certificate. */
+   public final String certificate;
++  /** Fingerprint of the DER representation of the certificate. */
++  public final String fingerprint;
+   /** Default expiration time of 30 days. */
+   private static final long DEFAULT_EXPIRY = 60 * 60 * 24 * 30;
+ 
+   /** Instantiate an RtcCertificatePem object from stored strings. */
+   @CalledByNative
+-  public RtcCertificatePem(String privateKey, String certificate) {
++  public RtcCertificatePem(String privateKey, String certificate, String fingerprint) {
+     this.privateKey = privateKey;
+     this.certificate = certificate;
++    this.fingerprint = fingerprint;
+   }
+ 
+   @CalledByNative
+@@ -40,6 +43,11 @@ public class RtcCertificatePem {
+     return certificate;
+   }
+ 
++  @CalledByNative
++  String getFingerprint() {
++    return fingerprint;
++  }
++
+   /**
+    * Generate a new RtcCertificatePem with the default settings of KeyType = ECDSA and
+    * expires = 30 days.
+diff --git a/sdk/android/src/jni/pc/rtc_certificate.cc b/sdk/android/src/jni/pc/rtc_certificate.cc
+index f305324ac8..4d937f43c6 100644
+--- a/sdk/android/src/jni/pc/rtc_certificate.cc
++++ b/sdk/android/src/jni/pc/rtc_certificate.cc
+@@ -28,8 +28,11 @@ rtc::RTCCertificatePEM JavaToNativeRTCCertificatePEM(
+       Java_RtcCertificatePem_getPrivateKey(jni, j_rtc_certificate);
+   ScopedJavaLocalRef<jstring> certificate_field =
+       Java_RtcCertificatePem_getCertificate(jni, j_rtc_certificate);
++  ScopedJavaLocalRef<jstring> fingerprint_field =
++      Java_RtcCertificatePem_getFingerprint(jni, j_rtc_certificate);
+   return rtc::RTCCertificatePEM(JavaToNativeString(jni, privatekey_field),
+-                                JavaToNativeString(jni, certificate_field));
++                                JavaToNativeString(jni, certificate_field),
++                                JavaToNativeString(jni, fingerprint_field));
+ }
+ 
+ ScopedJavaLocalRef<jobject> NativeToJavaRTCCertificatePEM(
+@@ -37,7 +40,8 @@ ScopedJavaLocalRef<jobject> NativeToJavaRTCCertificatePEM(
+     const rtc::RTCCertificatePEM& certificate) {
+   return Java_RtcCertificatePem_Constructor(
+       jni, NativeToJavaString(jni, certificate.private_key()),
+-      NativeToJavaString(jni, certificate.certificate()));
++      NativeToJavaString(jni, certificate.certificate()),
++      NativeToJavaString(jni, certificate.fingerprint()));
+ }
+ 
+ static ScopedJavaLocalRef<jobject> JNI_RtcCertificatePem_GenerateCertificate(
+@@ -52,7 +56,8 @@ static ScopedJavaLocalRef<jobject> JNI_RtcCertificatePem_GenerateCertificate(
+   rtc::RTCCertificatePEM pem = certificate->ToPEM();
+   return Java_RtcCertificatePem_Constructor(
+       jni, NativeToJavaString(jni, pem.private_key()),
+-      NativeToJavaString(jni, pem.certificate()));
++      NativeToJavaString(jni, pem.certificate()),
++      NativeToJavaString(jni, pem.fingerprint()));
+ }
+ 
+ }  // namespace jni
+diff --git a/sdk/objc/api/peerconnection/RTCCertificate.h b/sdk/objc/api/peerconnection/RTCCertificate.h
+index 5ac8984d4a..22189df492 100644
+--- a/sdk/objc/api/peerconnection/RTCCertificate.h
++++ b/sdk/objc/api/peerconnection/RTCCertificate.h
+@@ -23,11 +23,16 @@ RTC_OBJC_EXPORT
+ /** Public key in an x509 cert encoded in PEM. */
+ @property(nonatomic, readonly, copy) NSString *certificate;
+ 
++/** Fingerprint of the DER-encoded x509 cert. */
++@property(nonatomic, readonly, copy) NSString *fingerprint;
++
+ /**
+  * Initialize an RTCCertificate with PEM strings for private_key and certificate.
+  */
+ - (instancetype)initWithPrivateKey:(NSString *)private_key
+-                       certificate:(NSString *)certificate NS_DESIGNATED_INITIALIZER;
++                       certificate:(NSString *)certificate
++                       fingerprint:(NSString *)fingerprint
++                NS_DESIGNATED_INITIALIZER;
+ 
+ - (instancetype)init NS_UNAVAILABLE;
+ 
+diff --git a/sdk/objc/api/peerconnection/RTCCertificate.mm b/sdk/objc/api/peerconnection/RTCCertificate.mm
+index e5c33e407c..55d57469ff 100644
+--- a/sdk/objc/api/peerconnection/RTCCertificate.mm
++++ b/sdk/objc/api/peerconnection/RTCCertificate.mm
+@@ -20,17 +20,20 @@
+ 
+ @synthesize private_key = _private_key;
+ @synthesize certificate = _certificate;
++@synthesize fingerprint = _fingerprint;
+ 
+ - (id)copyWithZone:(NSZone *)zone {
+   id copy = [[[self class] alloc] initWithPrivateKey:[self.private_key copyWithZone:zone]
+-                                         certificate:[self.certificate copyWithZone:zone]];
++                                         certificate:[self.certificate copyWithZone:zone]
++                                         fingerprint:[self.fingerprint copyWithZone:zone]];
+   return copy;
+ }
+ 
+-- (instancetype)initWithPrivateKey:(NSString *)private_key certificate:(NSString *)certificate {
++- (instancetype)initWithPrivateKey:(NSString *)private_key certificate:(NSString *)certificate fingerprint:(NSString *)fingerprint {
+   if (self = [super init]) {
+     _private_key = [private_key copy];
+     _certificate = [certificate copy];
++    _fingerprint = [fingerprint copy];
+   }
+   return self;
+ }
+@@ -60,12 +63,14 @@
+   rtc::RTCCertificatePEM pem = cc_certificate->ToPEM();
+   std::string pem_private_key = pem.private_key();
+   std::string pem_certificate = pem.certificate();
++  std::string pem_fingerprint = pem.fingerprint();
+   RTC_LOG(LS_INFO) << "CERT PEM ";
+   RTC_LOG(LS_INFO) << pem_certificate;
+ 
+   RTC_OBJC_TYPE(RTCCertificate) *cert =
+       [[RTC_OBJC_TYPE(RTCCertificate) alloc] initWithPrivateKey:@(pem_private_key.c_str())
+-                                                    certificate:@(pem_certificate.c_str())];
++                                                    certificate:@(pem_certificate.c_str())
++                                                    fingerprint:@(pem_fingerprint.c_str())];
+   return cert;
+ }
+ 
+diff --git a/sdk/objc/api/peerconnection/RTCConfiguration.mm b/sdk/objc/api/peerconnection/RTCConfiguration.mm
+index e7838b8578..d5a9ebcdef 100644
+--- a/sdk/objc/api/peerconnection/RTCConfiguration.mm
++++ b/sdk/objc/api/peerconnection/RTCConfiguration.mm
+@@ -88,7 +88,8 @@
+       rtc::RTCCertificatePEM native_pem = native_cert->ToPEM();
+       _certificate = [[RTC_OBJC_TYPE(RTCCertificate) alloc]
+           initWithPrivateKey:@(native_pem.private_key().c_str())
+-                 certificate:@(native_pem.certificate().c_str())];
++                 certificate:@(native_pem.certificate().c_str())
++                 fingerprint:@(native_pem.fingerprint().c_str())];
+     }
+     _iceTransportPolicy =
+         [[self class] transportPolicyForTransportsType:config.type];
+@@ -237,7 +238,8 @@
+     RTC_LOG(LS_INFO) << "Have configured cert - using it.";
+     std::string pem_private_key = [[_certificate private_key] UTF8String];
+     std::string pem_certificate = [[_certificate certificate] UTF8String];
+-    rtc::RTCCertificatePEM pem = rtc::RTCCertificatePEM(pem_private_key, pem_certificate);
++    std::string pem_fingerprint = [[_certificate fingerprint] UTF8String];
++    rtc::RTCCertificatePEM pem = rtc::RTCCertificatePEM(pem_private_key, pem_certificate, pem_fingerprint);
+     rtc::scoped_refptr<rtc::RTCCertificate> certificate = rtc::RTCCertificate::FromPEM(pem);
+     RTC_LOG(LS_INFO) << "Created cert from PEM strings.";
+     if (!certificate) {
