@@ -1,8 +1,8 @@
 diff --git a/pc/BUILD.gn b/pc/BUILD.gn
-index 15c87dda25..1b2098e4dd 100644
+index 15c87dda25..7d6a641962 100644
 --- a/pc/BUILD.gn
 +++ b/pc/BUILD.gn
-@@ -1224,6 +1224,28 @@ rtc_source_set("peer_connection") {
+@@ -1224,6 +1224,26 @@ rtc_source_set("peer_connection") {
    ]
  }
  
@@ -13,7 +13,6 @@ index 15c87dda25..1b2098e4dd 100644
 +    "threema_group_call_frame_transformer.h",
 +  ]
 +  deps = [
-+    "//third_party/boringssl",
 +    "../api:frame_transformer_interface",
 +    "../api:make_ref_counted",
 +    "../api:scoped_refptr",
@@ -22,10 +21,9 @@ index 15c87dda25..1b2098e4dd 100644
 +    "../rtc_base:logging",
 +    "../rtc_base/synchronization:mutex",
 +    "../rtc_base/third_party/threema-blake2b",
++    "//third_party/boringssl",
 +  ]
-+  absl_deps = [
-+    "//third_party/abseil-cpp/absl/types:optional",
-+  ]
++  absl_deps = [ "//third_party/abseil-cpp/absl/types:optional" ]
 +}
 +
  rtc_source_set("sdp_serializer") {
@@ -1080,9 +1078,16 @@ index 0000000000..33c641e3a7
 +}  // namespace threema
 +
 +#endif  // PC_THREEMA_GROUP_CALL_FRAME_TRANSFORMER_H_
+diff --git a/rtc_base/third_party/threema-blake2b/.clang-format b/rtc_base/third_party/threema-blake2b/.clang-format
+new file mode 100644
+index 0000000000..e3845288a2
+--- /dev/null
++++ b/rtc_base/third_party/threema-blake2b/.clang-format
+@@ -0,0 +1 @@
++DisableFormat: true
 diff --git a/rtc_base/third_party/threema-blake2b/BUILD.gn b/rtc_base/third_party/threema-blake2b/BUILD.gn
 new file mode 100644
-index 0000000000..9080f4dd81
+index 0000000000..4af223855b
 --- /dev/null
 +++ b/rtc_base/third_party/threema-blake2b/BUILD.gn
 @@ -0,0 +1,18 @@
@@ -1104,7 +1109,6 @@ index 0000000000..9080f4dd81
 +    "ref/blake2b-ref.c",
 +  ]
 +}
-\ No newline at end of file
 diff --git a/rtc_base/third_party/threema-blake2b/blake2b.c b/rtc_base/third_party/threema-blake2b/blake2b.c
 new file mode 100644
 index 0000000000..f820a97910
@@ -1957,6 +1961,70 @@ index 0000000000..cd38b1ba00
 +  return -1;
 +}
 +#endif
+diff --git a/sdk/BUILD.gn b/sdk/BUILD.gn
+index a01cf96ebb..2ef595cc77 100644
+--- a/sdk/BUILD.gn
++++ b/sdk/BUILD.gn
+@@ -1039,6 +1039,15 @@ if (is_ios || is_mac) {
+         "objc/api/peerconnection/RTCVideoTrack+Private.h",
+         "objc/api/peerconnection/RTCVideoTrack.h",
+         "objc/api/peerconnection/RTCVideoTrack.mm",
++        "objc/api/peerconnection/ThreemaGroupCallFrameCryptoContext+Private.h",
++        "objc/api/peerconnection/ThreemaGroupCallFrameCryptoContext.h",
++        "objc/api/peerconnection/ThreemaGroupCallFrameCryptoContext.mm",
++        "objc/api/peerconnection/ThreemaGroupCallFrameCryptoDecryptor+Private.h",
++        "objc/api/peerconnection/ThreemaGroupCallFrameCryptoDecryptor.h",
++        "objc/api/peerconnection/ThreemaGroupCallFrameCryptoDecryptor.mm",
++        "objc/api/peerconnection/ThreemaGroupCallFrameCryptoEncryptor+Private.h",
++        "objc/api/peerconnection/ThreemaGroupCallFrameCryptoEncryptor.h",
++        "objc/api/peerconnection/ThreemaGroupCallFrameCryptoEncryptor.mm",
+       ]
+ 
+       configs += [
+@@ -1063,6 +1072,7 @@ if (is_ios || is_mac) {
+         ":videosource_objc",
+         ":videotoolbox_objc",
+         "../api:dtmf_sender_interface",
++        "../api:frame_transformer_interface",
+         "../api:libjingle_peerconnection_api",
+         "../api:media_stream_interface",
+         "../api:rtc_event_log_output_file",
+@@ -1089,6 +1099,7 @@ if (is_ios || is_mac) {
+         "../modules/audio_processing:api",
+         "../modules/video_coding:video_codec_interface",
+         "../pc:peer_connection_factory",
++        "../pc:threema_group_call_frame_transformer",
+         "../pc:webrtc_sdp",
+         "../rtc_base",
+         "../rtc_base:checks",
+@@ -1102,6 +1113,7 @@ if (is_ios || is_mac) {
+         "../stats:rtc_stats",
+         "../system_wrappers:field_trial",
+         "../system_wrappers:metrics",
++        "//third_party/boringssl",
+       ]
+ 
+       if (is_ios) {
+@@ -1344,6 +1356,9 @@ if (is_ios || is_mac) {
+           "objc/api/peerconnection/RTCCryptoOptions.h",
+           "objc/api/peerconnection/RTCVideoSource.h",
+           "objc/api/peerconnection/RTCVideoTrack.h",
++          "objc/api/peerconnection/ThreemaGroupCallFrameCryptoContext.h",
++          "objc/api/peerconnection/ThreemaGroupCallFrameCryptoEncryptor.h",
++          "objc/api/peerconnection/ThreemaGroupCallFrameCryptoDecryptor.h",
+           "objc/api/video_codec/RTCVideoCodecConstants.h",
+           "objc/api/video_codec/RTCVideoDecoderVP8.h",
+           "objc/api/video_codec/RTCVideoDecoderVP9.h",
+@@ -1456,6 +1471,9 @@ if (is_ios || is_mac) {
+           "objc/api/peerconnection/RTCTracing.h",
+           "objc/api/peerconnection/RTCVideoSource.h",
+           "objc/api/peerconnection/RTCVideoTrack.h",
++          "objc/api/peerconnection/ThreemaGroupCallFrameCryptoContext.h",
++          "objc/api/peerconnection/ThreemaGroupCallFrameCryptoDecryptor.h",
++          "objc/api/peerconnection/ThreemaGroupCallFrameCryptoEncryptor.h",
+           "objc/api/video_codec/RTCVideoDecoderAV1.h",
+           "objc/api/video_codec/RTCVideoDecoderVP8.h",
+           "objc/api/video_codec/RTCVideoDecoderVP9.h",
 diff --git a/sdk/android/BUILD.gn b/sdk/android/BUILD.gn
 index 8ef08a3a5b..92fc4416c5 100644
 --- a/sdk/android/BUILD.gn
@@ -2012,10 +2080,10 @@ index 8ef08a3a5b..92fc4416c5 100644
      namespace = "webrtc::jni"
 diff --git a/sdk/android/api/org/webrtc/ThreemaGroupCallFrameCryptoContext.java b/sdk/android/api/org/webrtc/ThreemaGroupCallFrameCryptoContext.java
 new file mode 100644
-index 0000000000..34ebe2c6a3
+index 0000000000..0320976ab8
 --- /dev/null
 +++ b/sdk/android/api/org/webrtc/ThreemaGroupCallFrameCryptoContext.java
-@@ -0,0 +1,195 @@
+@@ -0,0 +1,198 @@
 +/*
 + * Copyright 2023 Threema GmbH. All Rights Reserved.
 + *
@@ -2165,6 +2233,9 @@ index 0000000000..34ebe2c6a3
 +   * Adds a decryptor for the given participant ID. After calling this it can be
 +   * obtained by calling `getDecryptor` with the same participant ID until it is
 +   * removed by `removeDecryptor`.
++   *
++   * Throws an exception in case a decryptor with the same participant ID
++   * already exists.
 +   */
 +  public @NonNull Decryptor addDecryptor(short participantId) {
 +    ensureContext();
@@ -2382,3 +2453,519 @@ index 0000000000..5d4b0e60a7
 +}  // namespace webrtc
 +
 +#endif  // SDK_ANDROID_SRC_JNI_PC_THREEMA_GROUP_CALL_FRAME_CRYPTO_CONTEXT_H_
+diff --git a/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoContext+Private.h b/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoContext+Private.h
+new file mode 100644
+index 0000000000..a290032d3c
+--- /dev/null
++++ b/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoContext+Private.h
+@@ -0,0 +1,16 @@
++#import <Foundation/Foundation.h>
++
++#import "RTCMediaStreamTrack.h"
++
++NS_ASSUME_NONNULL_BEGIN
++
++RTC_OBJC_EXPORT
++@interface RTC_OBJC_TYPE (ThreemaGroupCallFrameCryptoContext)
++
+++ (void)validateMediaKey:(NSData *)pcmk;
++
+++ (threema::Codec)getCodec:(RTCRtpMediaType)mediaType;
++
++@end
++
++NS_ASSUME_NONNULL_END
+\ No newline at end of file
+diff --git a/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoContext.h b/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoContext.h
+new file mode 100644
+index 0000000000..96bdfd6f68
+--- /dev/null
++++ b/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoContext.h
+@@ -0,0 +1,74 @@
++#import <Foundation/Foundation.h>
++
++#import "RTCRtpReceiver.h"
++#import "RTCRtpSender.h"
++
++#import "ThreemaGroupCallFrameCryptoDecryptor.h"
++#import "ThreemaGroupCallFrameCryptoEncryptor.h"
++
++NS_ASSUME_NONNULL_BEGIN
++
++RTC_OBJC_EXPORT
++@protocol RTC_OBJC_TYPE
++(ThreemaGroupCallFrameCryptoContextProtocol)<NSObject>
++
++    - (instancetype)initWithgckh : (NSData *)gckh;
++
++- (ThreemaGroupCallFrameCryptoEncryptor *)getEncryptor;
++
++- (nullable ThreemaGroupCallFrameCryptoDecryptor *)getDecryptorFor:(UInt16)participantId;
++
++- (ThreemaGroupCallFrameCryptoDecryptor *)addDecryptorFor:(UInt16)participantId;
++
++- (void)removeDecryptorFor:(UInt16)participantId;
++
++- (void)dispose;
++
++@end
++
++/**
++ * Context holding references to encryptor and decryptors.
++ *
++ * IMPORTANT: This is **NOT** thread safe. It is your job to always call it from
++ * the same thread or use synchronisation primitives.
++ */
++RTC_OBJC_EXPORT
++@interface RTC_OBJC_TYPE (ThreemaGroupCallFrameCryptoContext) : NSObject <RTC_OBJC_TYPE(ThreemaGroupCallFrameCryptoContextProtocol)>
++
++/** Initialise the context with initial key material. */
++- (instancetype)initWithgckh:(NSData *)gckh;
++
++/** Returns the encryptor associated with this context. */
++- (ThreemaGroupCallFrameCryptoEncryptor *)getEncryptor;
++
++/**
++ * Returns the decryptor for the given participant ID iff it exists. Returns nil
++ * otherwise.
++ */
++- (nullable ThreemaGroupCallFrameCryptoDecryptor *)getDecryptorFor:(UInt16)participantId;
++
++/**
++ * Adds a decryptor for the given participant ID. After calling this it can be
++ * obtained by calling `getDecryptor:(participantId)` until it is removed by
++ * `removeDecryptor(participantId)`.
++ *
++ * Throws an exception in case a decryptor with the same participant ID already
++ * exists.
++ */
++- (ThreemaGroupCallFrameCryptoDecryptor *)addDecryptorFor:(UInt16)participantId;
++
++/**
++ * Removes the decyrptor for this participant ID. Does nothing if there is no
++ * decryptor for the provided participant ID.
++ */
++- (void)removeDecryptorFor:(UInt16)participantId;
++
++/**
++ * Disposes this context and its associated native part. Removes all associated
++ * encryptor and decryptors.
++ */
++- (void)dispose;
++
++@end
++
++NS_ASSUME_NONNULL_END
+\ No newline at end of file
+diff --git a/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoContext.mm b/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoContext.mm
+new file mode 100644
+index 0000000000..1aebc65930
+--- /dev/null
++++ b/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoContext.mm
+@@ -0,0 +1,117 @@
++#import <Foundation/Foundation.h>
++
++#import "RTCMediaStreamTrack.h"
++#import "RTCRtpReceiver.h"
++#import "RTCRtpSender.h"
++
++#import "pc/threema_group_call_frame_transformer.h"
++
++#include "api/rtp_receiver_interface.h"
++#include "api/rtp_sender_interface.h"
++
++#import "ThreemaGroupCallFrameCryptoContext.h"
++#import "ThreemaGroupCallFrameCryptoDecryptor+Private.h"
++#import "ThreemaGroupCallFrameCryptoDecryptor.h"
++#import "ThreemaGroupCallFrameCryptoEncryptor+Private.h"
++#import "ThreemaGroupCallFrameCryptoEncryptor.h"
++
++@implementation ThreemaGroupCallFrameCryptoContext {
++  rtc::scoped_refptr<threema::GroupCallFrameCryptoContext> context;
++  NSMutableDictionary<NSString *, ThreemaGroupCallFrameCryptoDecryptor *> *decryptorDict;
++  ThreemaGroupCallFrameCryptoEncryptor *encryptor;
++}
++
++- (instancetype)initWithgckh:(NSData *)gckh {
++  self = [super init];
++  if (self) {
++    self->context =
++        rtc::make_ref_counted<threema::GroupCallFrameCryptoContext>((const uint8_t *)gckh.bytes);
++    self->decryptorDict = [[NSMutableDictionary alloc] init];
++
++    self->encryptor = [[ThreemaGroupCallFrameCryptoEncryptor alloc] initWithContext:self->context];
++  }
++  return self;
++}
++
++- (ThreemaGroupCallFrameCryptoEncryptor *)getEncryptor {
++  [self ensureContext];
++  return encryptor;
++}
++
++- (nullable ThreemaGroupCallFrameCryptoDecryptor *)getDecryptorFor:(UInt16)participantId {
++  [self ensureContext];
++  NSString *key = [NSString stringWithFormat:@"%hu", participantId];
++  return decryptorDict[key];
++}
++
++- (ThreemaGroupCallFrameCryptoDecryptor *)addDecryptorFor:(UInt16)participantId {
++  [self ensureContext];
++  NSString *key = [NSString stringWithFormat:@"%hu", participantId];
++
++  if (decryptorDict[key] != nil) {
++    @throw
++        [NSException exceptionWithName:NSInvalidArgumentException
++                                reason:@"Decryptor for the given participant id already existing."
++                              userInfo:nil];
++  }
++
++  ThreemaGroupCallFrameCryptoDecryptor *decryptor =
++      [[ThreemaGroupCallFrameCryptoDecryptor alloc] initWithParticipantId:participantId
++                                                                  context:self->context];
++  decryptorDict[key] = decryptor;
++
++  return decryptor;
++}
++
++- (void)removeDecryptorFor:(UInt16)participantId {
++  [self ensureContext];
++  NSString *key = [NSString stringWithFormat:@"%hu", participantId];
++  [decryptorDict removeObjectForKey:key];
++}
++
++- (void)dispose {
++  if (context == nil) {
++    return;
++  }
++
++  for (ThreemaGroupCallFrameCryptoDecryptor *decryptor in [decryptorDict allValues]) {
++    [decryptor remove];
++  }
++
++  [decryptorDict removeAllObjects];
++
++  [encryptor remove];
++  self->context = nil;
++}
++
++- (rtc::scoped_refptr<threema::GroupCallFrameCryptoContext>)ensureContext {
++  if (self->context) {
++    return self->context;
++  }
++  @throw [NSException exceptionWithName:NSInvalidArgumentException
++                                 reason:@"Missing Context"
++                               userInfo:nil];
++}
++
+++ (threema::Codec)getCodec:(RTCRtpMediaType)mediaType {
++  if (mediaType == RTCRtpMediaTypeAudio) {
++    return threema::Codec::kOpus;
++  } else if (mediaType == RTCRtpMediaTypeVideo) {
++    return threema::Codec::kVp8;
++  }
++
++  RTC_CHECK_NOTREACHED();
++  @throw [NSException exceptionWithName:NSInvalidArgumentException
++                                 reason:@"Illegal media type"
++                               userInfo:nil];
++}
++
+++ (void)validateMediaKey:(NSData *)pcmk {
++  if (pcmk.length != 32) {
++    @throw [NSException exceptionWithName:NSInvalidArgumentException
++                                   reason:@"'pcmk' must be 32 bytes"
++                                 userInfo:nil];
++  }
++}
++
++@end
+\ No newline at end of file
+diff --git a/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoDecryptor+Private.h b/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoDecryptor+Private.h
+new file mode 100644
+index 0000000000..30d4069bc6
+--- /dev/null
++++ b/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoDecryptor+Private.h
+@@ -0,0 +1,13 @@
++#import "ThreemaGroupCallFrameCryptoDecryptor.h"
++
++NS_ASSUME_NONNULL_BEGIN
++
++@interface RTC_OBJC_TYPE (ThreemaGroupCallFrameCryptoDecryptor)
++()
++
++    - (instancetype)initWithParticipantId : (UInt8)participantId context
++    : (rtc::scoped_refptr<threema::GroupCallFrameCryptoContext>)context;
++
++@end
++
++NS_ASSUME_NONNULL_END
+\ No newline at end of file
+diff --git a/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoDecryptor.h b/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoDecryptor.h
+new file mode 100644
+index 0000000000..14040d0254
+--- /dev/null
++++ b/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoDecryptor.h
+@@ -0,0 +1,47 @@
++#import <Foundation/Foundation.h>
++
++#import "RTCRtpReceiver.h"
++
++NS_ASSUME_NONNULL_BEGIN
++
++RTC_OBJC_EXPORT
++@protocol RTC_OBJC_TYPE
++(ThreemaGroupCallFrameCryptoDecryptorProtocol)<NSObject>
++
++    - (void)addPcmk : (NSData *)pcmk epoch : (UInt8)epoch ratchetCounter : (UInt8)ratchetCounter;
++
++- (void)attachWithReceiver:(RTCRtpReceiver *)receiver
++                 mediaType:(RTCRtpMediaType)mediaType
++                       tag:(NSString *)tag;
++
++- (void)remove;
++
++@end
++
++/** Decrypts incoming audio/video frames of another participant. */
++RTC_OBJC_EXPORT
++@interface RTC_OBJC_TYPE (ThreemaGroupCallFrameCryptoDecryptor) : NSObject <RTC_OBJC_TYPE(ThreemaGroupCallFrameCryptoDecryptorProtocol)>
++
++/** The participant ID for which this decryptor will decrypt frames. */
++@property (nonatomic, assign, readonly) UInt16 participantId;
++
++/** Initialise or update the key material of the decryptor. */
++- (void)addPcmk:(NSData *)pcmk epoch:(UInt8)epoch ratchetCounter:(UInt8)ratchetCounter;
++
++/**
++ * Attach an RTP receiver to the decryptor, decrypting all upcoming audio/video
++ * frames.
++ */
++- (void)attachWithReceiver:(RTCRtpReceiver *)receiver
++                 mediaType:(RTCRtpMediaType)mediaType
++                       tag:(NSString *)tag;
++
++/**
++ * Remove the decryptor. Note that it doesn't detach from the RTP receiver for
++ * simplicity.
++ */
++- (void)remove;
++
++@end
++
++NS_ASSUME_NONNULL_END
+\ No newline at end of file
+diff --git a/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoDecryptor.mm b/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoDecryptor.mm
+new file mode 100644
+index 0000000000..737d037f93
+--- /dev/null
++++ b/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoDecryptor.mm
+@@ -0,0 +1,78 @@
++#import <Foundation/Foundation.h>
++
++#import "RTCRtpReceiver+Private.h"
++#import "RTCRtpReceiver.h"
++
++#import "pc/threema_group_call_frame_transformer.h"
++
++#import "ThreemaGroupCallFrameCryptoContext+Private.h"
++#import "ThreemaGroupCallFrameCryptoDecryptor.h"
++
++@implementation ThreemaGroupCallFrameCryptoDecryptor {
++  rtc::scoped_refptr<threema::GroupCallFrameCryptoContext> context;
++}
++
++static const UInt16 MIDS_MAX = 790;
++
++- (instancetype)initWithParticipantId:(UInt16)participantId
++                              context:(rtc::scoped_refptr<threema::GroupCallFrameCryptoContext>)
++                                          context {
++  self = [super init];
++  if (self) {
++    [self validateParticipantId:participantId];
++
++    _participantId = participantId;
++
++    self->context = context;
++
++    auto ensuredContext = [self ensureContext];
++
++    ensuredContext->AddDecryptor((uint16_t)participantId);
++  }
++  return self;
++}
++
++- (void)addPcmk:(NSData *)pcmk epoch:(UInt8)epoch ratchetCounter:(UInt8)ratchetCounter {
++  [ThreemaGroupCallFrameCryptoContext validateMediaKey:pcmk];
++
++  auto ensuredContext = [self ensureContext];
++  ensuredContext->GetDecryptor((uint16_t)_participantId)
++      .AddPcmk((const uint8_t *)pcmk.bytes, (uint8_t)epoch, (uint8_t)ratchetCounter);
++}
++
++- (void)attachWithReceiver:(RTCRtpReceiver *)receiver
++                 mediaType:(RTCRtpMediaType)mediaType
++                       tag:(NSString *)tag {
++  auto ensuredContext = [self ensureContext];
++  auto transformer = ensuredContext->GetDecryptor((uint16_t)_participantId)
++                         .CreateDecryptor(std::string([tag UTF8String]),
++                                          [ThreemaGroupCallFrameCryptoContext getCodec:mediaType]);
++
++  auto nativeRtpReceiver = [receiver nativeRtpReceiver];
++  nativeRtpReceiver->SetDepacketizerToDecoderFrameTransformer(std::move(transformer));
++}
++
++- (void)remove {
++  auto ensuredContext = [self ensureContext];
++  ensuredContext->RemoveDecryptor((uint16_t)_participantId);
++  self->context = nil;
++}
++
++- (rtc::scoped_refptr<threema::GroupCallFrameCryptoContext>)ensureContext {
++  if (self->context) {
++    return self->context;
++  }
++  @throw [NSException exceptionWithName:NSInvalidArgumentException
++                                 reason:@"Decryptor has been removed"
++                               userInfo:nil];
++}
++
++- (void)validateParticipantId:(UInt16)participantId {
++  if (participantId >= MIDS_MAX) {
++    @throw [NSException exceptionWithName:NSInvalidArgumentException
++                                   reason:@"'participantId' must be >= 0 and < MIDS_MAX"
++                                 userInfo:nil];
++  }
++}
++
++@end
+\ No newline at end of file
+diff --git a/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoEncryptor+Private.h b/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoEncryptor+Private.h
+new file mode 100644
+index 0000000000..128ec35405
+--- /dev/null
++++ b/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoEncryptor+Private.h
+@@ -0,0 +1,13 @@
++#import "ThreemaGroupCallFrameCryptoEncryptor.h"
++
++NS_ASSUME_NONNULL_BEGIN
++
++@interface RTC_OBJC_TYPE (ThreemaGroupCallFrameCryptoEncryptor)
++()
++
++    - (instancetype)initWithContext
++    : (rtc::scoped_refptr<threema::GroupCallFrameCryptoContext>)context;
++
++@end
++
++NS_ASSUME_NONNULL_END
+\ No newline at end of file
+diff --git a/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoEncryptor.h b/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoEncryptor.h
+new file mode 100644
+index 0000000000..06429f8739
+--- /dev/null
++++ b/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoEncryptor.h
+@@ -0,0 +1,38 @@
++#import <Foundation/Foundation.h>
++
++#import "RTCRtpSender.h"
++
++NS_ASSUME_NONNULL_BEGIN
++
++RTC_OBJC_EXPORT
++@protocol RTC_OBJC_TYPE
++(ThreemaGroupCallFrameCryptoEncryptorProtocol)<NSObject>
++
++    - (void)setPcmk : (NSData *)pcmk epoch : (UInt8)epoch ratchetCounter : (UInt8)ratchetCounter;
++
++- (void)attach:(RTCRtpSender *)sender mediaType:(RTCRtpMediaType)mediaType tag:(NSString *)tag;
++
++@end
++
++/** Decrypts incoming audio/video frames of another participant. */
++RTC_OBJC_EXPORT
++@interface RTC_OBJC_TYPE (ThreemaGroupCallFrameCryptoEncryptor) : NSObject <RTC_OBJC_TYPE(ThreemaGroupCallFrameCryptoEncryptorProtocol)>
++
++/** Initialise or update the key material of the encryptor. */
++- (void)setPcmk:(NSData *)pcmk epoch:(UInt8)epoch ratchetCounter:(UInt8)ratchetCounter;
++
++/**
++ * Attach an RTP sender to the encryptor, encrypting all upcoming audio/video
++ * frames.
++ */
++- (void)attach:(RTCRtpSender *)sender mediaType:(RTCRtpMediaType)mediaType tag:(NSString *)tag;
++
++/**
++ * Remove the encryptor. Note that it doesn't detach from the RTP sender for
++ * simplicity.
++ */
++- (void)remove;
++
++@end
++
++NS_ASSUME_NONNULL_END
+\ No newline at end of file
+diff --git a/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoEncryptor.mm b/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoEncryptor.mm
+new file mode 100644
+index 0000000000..0c085b8bf0
+--- /dev/null
++++ b/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoEncryptor.mm
+@@ -0,0 +1,57 @@
++#import <Foundation/Foundation.h>
++
++#import "RTCRtpReceiver.h"
++#import "RTCRtpSender+Private.h"
++#import "RTCRtpSender.h"
++
++#import "pc/threema_group_call_frame_transformer.h"
++
++#include "api/rtp_receiver_interface.h"
++#include "api/rtp_sender_interface.h"
++
++#import "ThreemaGroupCallFrameCryptoContext+Private.h"
++#import "ThreemaGroupCallFrameCryptoEncryptor.h"
++
++@implementation ThreemaGroupCallFrameCryptoEncryptor {
++  rtc::scoped_refptr<threema::GroupCallFrameCryptoContext> context;
++}
++
++- (instancetype)initWithContext:(rtc::scoped_refptr<threema::GroupCallFrameCryptoContext>)context {
++  self = [super init];
++  if (self) {
++    self->context = context;
++  }
++  return self;
++}
++
++- (void)setPcmk:(NSData *)pcmk epoch:(UInt8)epoch ratchetCounter:(UInt8)ratchetCounter {
++  [ThreemaGroupCallFrameCryptoContext validateMediaKey:pcmk];
++
++  auto ensuredContext = [self ensureContext];
++  ensuredContext->GetEncryptor().SetPcmk(
++      (const uint8_t *)pcmk.bytes, (uint8_t)epoch, (uint8_t)ratchetCounter);
++}
++
++- (void)attach:(RTCRtpSender *)sender mediaType:(RTCRtpMediaType)mediaType tag:(NSString *)tag {
++  auto ensuredContext = [self ensureContext];
++  auto transformer = ensuredContext->GetEncryptor().CreateEncryptor(
++      std::string([tag UTF8String]), [ThreemaGroupCallFrameCryptoContext getCodec:mediaType]);
++
++  auto nativeRtpSender = [sender nativeRtpSender];
++  nativeRtpSender->SetEncoderToPacketizerFrameTransformer(std::move(transformer));
++}
++
++- (void)remove {
++  self->context = nil;
++}
++
++- (rtc::scoped_refptr<threema::GroupCallFrameCryptoContext>)ensureContext {
++  if (self->context) {
++    return self->context;
++  }
++  @throw [NSException exceptionWithName:NSInvalidArgumentException
++                                 reason:@"Missing Context"
++                               userInfo:nil];
++}
++
++@end
+\ No newline at end of file
