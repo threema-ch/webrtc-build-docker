@@ -113,11 +113,28 @@ case ${1-} in
         # Update sources
         docker run -it -v ${PWD}/webrtc:/webrtc threema/webrtc-build-tools:latest bash -c "
             set -euo pipefail
-            echo \"Updating current branch (\$(cd src && git branch --show-current))\"
-            (cd src && git rebase-update --current)
+            echo \"Updating source files and tracking branches\"
+            echo \"Note: This will leave all untracked branches untouched!\"
+            (cd src && git rebase-update)
             echo 'Updating third party repos and running pre-compile hooks'
             gclient sync -D
             echo 'Done. Any patches and uncommited changes to libwebrtc need to be reapplied.'
+        "
+        ;;
+
+    sync)
+        require_tools_image
+        if [[ ! -d "webrtc" ]]; then
+            echo "Cannot update, source directory 'webrtc' does not exist"
+            echo "Did you forget to run an initial '$0 fetch'?"
+            exit 4;
+        fi
+
+        # Sync sources
+        docker run -it -v ${PWD}/webrtc:/webrtc threema/webrtc-build-tools:latest bash -c "
+            set -euo pipefail
+            echo 'Syncing third party repos and running pre-compile hooks'
+            gclient sync -D
         "
         ;;
 

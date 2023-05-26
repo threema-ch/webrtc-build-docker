@@ -57,7 +57,15 @@ such:
     ./cli.sh update
 
 This will work on any branch but obviously may not switch to the most recent
-code revision (e.g. if on a release branch).
+code revision (e.g. if on a release branch). When in detached head state, this
+will automatically check out the HEAD of the main branch.
+
+If you just want to sync libwebrtc source against the current commit/branch
+you've checked out, run:
+
+    ./cli.sh sync
+
+This is particularly useful when in detached head state.
 
 As an optional step, apply our patches:
 
