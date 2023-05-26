@@ -851,7 +851,7 @@ index 0000000000..45bad1b805
 +}  // namespace threema
 diff --git a/pc/threema_group_call_frame_transformer.h b/pc/threema_group_call_frame_transformer.h
 new file mode 100644
-index 0000000000..c43c57f4b1
+index 0000000000..33c641e3a7
 --- /dev/null
 +++ b/pc/threema_group_call_frame_transformer.h
 @@ -0,0 +1,225 @@
@@ -904,7 +904,7 @@ index 0000000000..c43c57f4b1
 +
 +struct GroupCallFrameCryptoAeadCtxState {
 +  explicit GroupCallFrameCryptoAeadCtxState()
-+      : initialized(false), aead_ctx({0}), epoch(0), ratchet_counter(0) {}
++      : initialized(false), aead_ctx({}), epoch(0), ratchet_counter(0) {}
 +
 +  bool initialized;
 +  EVP_AEAD_CTX aead_ctx;
@@ -1958,39 +1958,35 @@ index 0000000000..cd38b1ba00
 +}
 +#endif
 diff --git a/sdk/android/BUILD.gn b/sdk/android/BUILD.gn
-index 8ef08a3a5b..4a6d8a08d6 100644
+index 8ef08a3a5b..92fc4416c5 100644
 --- a/sdk/android/BUILD.gn
 +++ b/sdk/android/BUILD.gn
-@@ -300,6 +300,7 @@ if (is_android) {
+@@ -296,6 +296,7 @@ if (is_android) {
+       "api/org/webrtc/SessionDescription.java",
+       "api/org/webrtc/StatsObserver.java",
+       "api/org/webrtc/StatsReport.java",
++      "api/org/webrtc/ThreemaGroupCallFrameCryptoContext.java",
+       "api/org/webrtc/TurnCustomizer.java",
        "api/org/webrtc/VideoProcessor.java",
        "api/org/webrtc/VideoSource.java",
-       "api/org/webrtc/VideoTrack.java",
-+      "api/org/webrtc/ThreemaGroupCallFrameCryptoContext.java",
-       "src/java/org/webrtc/NativeAndroidVideoTrackSource.java",
-       "src/java/org/webrtc/NativeCapturerObserver.java",
-       "src/java/org/webrtc/NativeLibrary.java",
-@@ -754,9 +755,12 @@ if (current_os == "linux" || is_android) {
+@@ -752,6 +753,8 @@ if (current_os == "linux" || is_android) {
+       "src/jni/pc/ssl_certificate_verifier_wrapper.h",
+       "src/jni/pc/stats_observer.cc",
        "src/jni/pc/stats_observer.h",
-       "src/jni/pc/turn_customizer.cc",
-       "src/jni/pc/turn_customizer.h",
 +      "src/jni/pc/threema_group_call_frame_crypto_context.cc",
 +      "src/jni/pc/threema_group_call_frame_crypto_context.h",
+       "src/jni/pc/turn_customizer.cc",
+       "src/jni/pc/turn_customizer.h",
      ]
- 
-     deps = [
-+      "//third_party/boringssl",
-       ":base_jni",
-       ":generated_external_classes_jni",
-       ":generated_peerconnection_jni",
-@@ -776,6 +780,7 @@ if (current_os == "linux" || is_android) {
-       "../../api/rtc_event_log:rtc_event_log_factory",
-       "../../api/task_queue:default_task_queue_factory",
-       "../../api/video_codecs:video_codecs_api",
+@@ -766,6 +769,7 @@ if (current_os == "linux" || is_android) {
+       "..:media_constraints",
+       "../../api:callfactory_api",
+       "../../api:dtmf_sender_interface",
 +      "../../api:frame_transformer_interface",
-       "../../call:call_interfaces",
-       "../../media:rtc_audio_video",
-       "../../media:rtc_media_base",
-@@ -783,6 +788,7 @@ if (current_os == "linux" || is_android) {
+       "../../api:libjingle_peerconnection_api",
+       "../../api:media_stream_interface",
+       "../../api:rtc_event_log_output_file",
+@@ -783,6 +787,7 @@ if (current_os == "linux" || is_android) {
        "../../modules/audio_processing:api",
        "../../modules/utility",
        "../../pc:media_stream_observer",
@@ -1998,53 +1994,66 @@ index 8ef08a3a5b..4a6d8a08d6 100644
        "../../pc:webrtc_sdp",
        "../../rtc_base",
        "../../rtc_base:checks",
-@@ -1407,6 +1413,7 @@ if (current_os == "linux" || is_android) {
+@@ -794,6 +799,7 @@ if (current_os == "linux" || is_android) {
+       "../../rtc_base:stringutils",
+       "../../rtc_base:threading",
+       "../../system_wrappers:field_trial",
++      "//third_party/boringssl",
+     ]
+     absl_deps = [
+       "//third_party/abseil-cpp/absl/memory",
+@@ -1406,6 +1412,7 @@ if (current_os == "linux" || is_android) {
+       "api/org/webrtc/SessionDescription.java",
        "api/org/webrtc/StatsObserver.java",
        "api/org/webrtc/StatsReport.java",
-       "api/org/webrtc/TurnCustomizer.java",
 +      "api/org/webrtc/ThreemaGroupCallFrameCryptoContext.java",
+       "api/org/webrtc/TurnCustomizer.java",
      ]
      namespace = "webrtc::jni"
-     jni_generator_include = "//sdk/android/src/jni/jni_generator_helper.h"
 diff --git a/sdk/android/api/org/webrtc/ThreemaGroupCallFrameCryptoContext.java b/sdk/android/api/org/webrtc/ThreemaGroupCallFrameCryptoContext.java
 new file mode 100644
-index 0000000000..005cd5e81c
+index 0000000000..34ebe2c6a3
 --- /dev/null
 +++ b/sdk/android/api/org/webrtc/ThreemaGroupCallFrameCryptoContext.java
-@@ -0,0 +1,162 @@
+@@ -0,0 +1,195 @@
 +/*
-+ * Copyright 2022 Threema GmbH. All Rights Reserved.
++ * Copyright 2023 Threema GmbH. All Rights Reserved.
 + *
-+ * Use of this source code is governed by a BSD-style license
-+ * that can be found in the LICENSE file in the root of the source
-+ * tree.
++ * Use of this source code is governed by a BSD-style license that can be found
++ * in the LICENSE file in the root of the source tree.
 + */
 +
 +package org.webrtc;
 +
-+import java.util.HashMap;
-+import java.util.Map;
 +import androidx.annotation.NonNull;
 +import androidx.annotation.Nullable;
++import java.util.HashMap;
++import java.util.Map;
 +
 +/**
++ * Context holding references to encryptor and decryptors.
++ *
 + * IMPORTANT: This is **NOT** thread safe. It is your job to always call it from
-+ *            the same thread or use synchronisation primitives.
++ * the same thread or use synchronisation primitives.
 + */
 +public class ThreemaGroupCallFrameCryptoContext {
 +  private static native long nativeCreate(@NonNull byte[] gckh);
 +
-+  private static native void nativeEncryptorSetPcmk(long context, @NonNull byte[] pcmk, short epoch, short ratchetCounter);
-+  private static native void nativeEncryptorAttach(long context, long nativeRtpSender, @NonNull String tag);
++  private static native void nativeEncryptorSetPcmk(
++      long context, @NonNull byte[] pcmk, short epoch, short ratchetCounter);
++  private static native void nativeEncryptorAttach(
++      long context, long nativeRtpSender, @NonNull String tag);
 +
 +  private static native void nativeDecryptorAdd(long context, short participantId);
 +  private static native void nativeDecryptorRemove(long context, short participantId);
-+  private static native void nativeDecryptorAddPcmk(long context, short participantId, @NonNull byte[] pcmk, short epoch, short ratchetCounter);
-+  private static native void nativeDecryptorAttach(long context, short participantId, long nativeRtpReceiver, @NonNull String tag);
++  private static native void nativeDecryptorAddPcmk(
++      long context, short participantId, @NonNull byte[] pcmk, short epoch, short ratchetCounter);
++  private static native void nativeDecryptorAttach(
++      long context, short participantId, long nativeRtpReceiver, @NonNull String tag);
 +
 +  private static short MIDS_MAX = 790;
 +
-+  private static void validateMediaKeys(@NonNull byte[] pcmk, short epoch, short ratchetCounter) {
++  private static void validateMediaKey(@NonNull byte[] pcmk, short epoch, short ratchetCounter) {
 +    if (pcmk.length != 32) {
 +      throw new IllegalArgumentException("'pcmk' must be 32 bytes");
 +    }
@@ -2068,11 +2077,14 @@ index 0000000000..005cd5e81c
 +
 +    /** Initialise or update the key material of the encryptor. */
 +    public void setPcmk(@NonNull byte[] pcmk, short epoch, short ratchetCounter) {
-+      validateMediaKeys(pcmk, epoch, ratchetCounter);
-+      nativeEncryptorSetPcmk(nativeContext, pcmk, epoch, ratchetCounter);
++      validateMediaKey(pcmk, epoch, ratchetCounter);
++      nativeEncryptorSetPcmk(ensureContext(), pcmk, epoch, ratchetCounter);
 +    }
 +
-+    /** Attach an RTP sender to the encryptor, encrypting all upcoming audio/video frames. */
++    /**
++     * Attach an RTP sender to the encryptor, encrypting all upcoming
++     * audio/video frames.
++     */
 +    public void attach(@NonNull RtpSender sender, @NonNull String tag) {
 +      final long nativeSender = sender.getNativeRtpSender();
 +      nativeEncryptorAttach(ensureContext(), nativeSender, tag);
@@ -2093,11 +2105,14 @@ index 0000000000..005cd5e81c
 +    /** Initialise or update the key material of the decryptor. */
 +    public void addPcmk(@NonNull byte[] pcmk, short epoch, short ratchetCounter) {
 +      ensureActive();
-+      validateMediaKeys(pcmk, epoch, ratchetCounter);
-+      nativeDecryptorAddPcmk(nativeContext, participantId, pcmk, epoch, ratchetCounter);
++      validateMediaKey(pcmk, epoch, ratchetCounter);
++      nativeDecryptorAddPcmk(ensureContext(), participantId, pcmk, epoch, ratchetCounter);
 +    }
 +
-+    /** Attach an RTP receiver to the decryptor, decrypting all upcoming audio/video frames. */
++    /**
++     * Attach an RTP receiver to the decryptor, decrypting all upcoming
++     * audio/video frames.
++     */
 +    public void attach(@NonNull RtpReceiver receiver, @NonNull String tag) {
 +      ensureActive();
 +      final long nativeReceiver = receiver.getNativeRtpReceiver();
@@ -2106,11 +2121,14 @@ index 0000000000..005cd5e81c
 +
 +    private void ensureActive() {
 +      if (!active) {
-+        throw new IllegalStateException("Decryptor has been remove");
++        throw new IllegalStateException("Decryptor has been removed");
 +      }
 +    }
 +
-+    /** Remove the decryptor. Note that it doesn't detach from the RTP receiver for simplicity. */
++    /**
++     * Remove the decryptor. Note that it doesn't detach from the RTP receiver
++     * for simplicity.
++     */
 +    private void remove() {
 +      ensureActive();
 +      nativeDecryptorRemove(ensureContext(), participantId);
@@ -2122,21 +2140,32 @@ index 0000000000..005cd5e81c
 +  private @NonNull final Encryptor encryptor;
 +  private @NonNull final Map<Short, Decryptor> decryptors = new HashMap<>();
 +
++  /** Initialise the context with initial key material. */
 +  public ThreemaGroupCallFrameCryptoContext(@NonNull byte[] gckh) {
 +    nativeContext = nativeCreate(gckh);
 +    encryptor = new Encryptor();
 +  }
 +
++  /** Returns the encryptor associated with this context. */
 +  public @NonNull Encryptor getEncryptor() {
 +    ensureContext();
 +    return encryptor;
 +  }
 +
++  /**
++   * Returns the decryptor for the given participant ID iff it exists. Returns
++   * null otherwise.
++   */
 +  public @Nullable Decryptor getDecryptor(short participantId) {
 +    ensureContext();
 +    return decryptors.get(participantId);
 +  }
 +
++  /**
++   * Adds a decryptor for the given participant ID. After calling this it can be
++   * obtained by calling `getDecryptor` with the same participant ID until it is
++   * removed by `removeDecryptor`.
++   */
 +  public @NonNull Decryptor addDecryptor(short participantId) {
 +    ensureContext();
 +    if (decryptors.containsKey(participantId)) {
@@ -2147,6 +2176,10 @@ index 0000000000..005cd5e81c
 +    return decryptor;
 +  }
 +
++  /**
++   * Removes the decyrptor for this participant ID. Does nothing if there is no
++   * decryptor for the provided participant ID.
++   */
 +  public void removeDecryptor(short participantId) {
 +    ensureContext();
 +    final Decryptor decryptor = decryptors.remove(participantId);
@@ -2155,6 +2188,10 @@ index 0000000000..005cd5e81c
 +    }
 +  }
 +
++  /**
++   * Disposes this context and its associated native part. Removes all
++   * associated encryptor and decryptors.
++   */
 +  public void dispose() {
 +    if (nativeContext == 0) {
 +      return;
@@ -2176,7 +2213,7 @@ index 0000000000..005cd5e81c
 +};
 diff --git a/sdk/android/src/jni/pc/threema_group_call_frame_crypto_context.cc b/sdk/android/src/jni/pc/threema_group_call_frame_crypto_context.cc
 new file mode 100644
-index 0000000000..fc4ee18ffd
+index 0000000000..58b8f0627f
 --- /dev/null
 +++ b/sdk/android/src/jni/pc/threema_group_call_frame_crypto_context.cc
 @@ -0,0 +1,138 @@
@@ -2281,7 +2318,7 @@ index 0000000000..fc4ee18ffd
 +
 +// IMPORTANT: Caller must ensure that `j_participant_id` is a valid participant
 +// id, `j_pcmk` is exactly 32 bytes and `j_epoch` and `j_ratchet_counter` can be
-+// safely casted to u8!!
++// safely casted to u8!
 +static void JNI_ThreemaGroupCallFrameCryptoContext_DecryptorAddPcmk(
 +    JNIEnv* jni,
 +    jlong j_context_pointer,
@@ -2320,10 +2357,10 @@ index 0000000000..fc4ee18ffd
 +}  // namespace webrtc
 diff --git a/sdk/android/src/jni/pc/threema_group_call_frame_crypto_context.h b/sdk/android/src/jni/pc/threema_group_call_frame_crypto_context.h
 new file mode 100644
-index 0000000000..9ef6d20ee9
+index 0000000000..5d4b0e60a7
 --- /dev/null
 +++ b/sdk/android/src/jni/pc/threema_group_call_frame_crypto_context.h
-@@ -0,0 +1,23 @@
+@@ -0,0 +1,21 @@
 +/*
 + * Copyright 2022 Threema GmbH. All Rights Reserved.
 + *
@@ -2341,9 +2378,7 @@ index 0000000000..9ef6d20ee9
 +#include "sdk/android/native_api/jni/scoped_java_ref.h"
 +
 +namespace webrtc {
-+namespace jni {
-+
-+}  // namespace jni
++namespace jni {}  // namespace jni
 +}  // namespace webrtc
 +
 +#endif  // SDK_ANDROID_SRC_JNI_PC_THREEMA_GROUP_CALL_FRAME_CRYPTO_CONTEXT_H_
