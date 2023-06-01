@@ -1,5 +1,5 @@
 diff --git a/sdk/android/api/org/webrtc/FileVideoCapturer.java b/sdk/android/api/org/webrtc/FileVideoCapturer.java
-index 8270367970..364f8e4de4 100644
+index 8270367970..e2832f7698 100644
 --- a/sdk/android/api/org/webrtc/FileVideoCapturer.java
 +++ b/sdk/android/api/org/webrtc/FileVideoCapturer.java
 @@ -145,6 +145,7 @@ public class FileVideoCapturer implements VideoCapturer {
@@ -37,10 +37,10 @@ index 8270367970..364f8e4de4 100644
    public void dispose() {
      videoReader.close();
 diff --git a/sdk/android/api/org/webrtc/ScreenCapturerAndroid.java b/sdk/android/api/org/webrtc/ScreenCapturerAndroid.java
-index bff5ad74a2..8c8e62da97 100644
+index 231d507155..381139150a 100644
 --- a/sdk/android/api/org/webrtc/ScreenCapturerAndroid.java
 +++ b/sdk/android/api/org/webrtc/ScreenCapturerAndroid.java
-@@ -170,7 +170,7 @@ public class ScreenCapturerAndroid implements VideoCapturer, VideoSink {
+@@ -171,7 +171,7 @@ public class ScreenCapturerAndroid implements VideoCapturer, VideoSink {
      this.height = height;
  
      if (virtualDisplay == null) {
@@ -49,7 +49,7 @@ index bff5ad74a2..8c8e62da97 100644
        return;
      }
  
-@@ -186,6 +186,12 @@ public class ScreenCapturerAndroid implements VideoCapturer, VideoSink {
+@@ -187,6 +187,12 @@ public class ScreenCapturerAndroid implements VideoCapturer, VideoSink {
      });
    }
  
@@ -79,7 +79,7 @@ index 67eb7ab086..5425657df0 100644
     * Perform any final cleanup here. No more capturing will be done after this call.
     */
 diff --git a/sdk/android/src/java/org/webrtc/CameraCapturer.java b/sdk/android/src/java/org/webrtc/CameraCapturer.java
-index 47519d765f..df62833225 100644
+index 1922a529e2..2375fba0e4 100644
 --- a/sdk/android/src/java/org/webrtc/CameraCapturer.java
 +++ b/sdk/android/src/java/org/webrtc/CameraCapturer.java
 @@ -312,6 +312,13 @@ abstract class CameraCapturer implements CameraVideoCapturer {

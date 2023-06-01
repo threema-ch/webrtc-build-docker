@@ -85,7 +85,7 @@ index 6070135b3e..ab7a07a516 100644
     * Generate a new RtcCertificatePem with the default settings of KeyType = ECDSA and
     * expires = 30 days.
 diff --git a/sdk/android/src/jni/pc/rtc_certificate.cc b/sdk/android/src/jni/pc/rtc_certificate.cc
-index f305324ac8..4d937f43c6 100644
+index db7c150ca5..0cbb4fef82 100644
 --- a/sdk/android/src/jni/pc/rtc_certificate.cc
 +++ b/sdk/android/src/jni/pc/rtc_certificate.cc
 @@ -28,8 +28,11 @@ rtc::RTCCertificatePEM JavaToNativeRTCCertificatePEM(
@@ -122,10 +122,10 @@ index f305324ac8..4d937f43c6 100644
  
  }  // namespace jni
 diff --git a/sdk/objc/api/peerconnection/RTCCertificate.h b/sdk/objc/api/peerconnection/RTCCertificate.h
-index 5ac8984d4a..22189df492 100644
+index 5ac8984d4a..2f1c5a5478 100644
 --- a/sdk/objc/api/peerconnection/RTCCertificate.h
 +++ b/sdk/objc/api/peerconnection/RTCCertificate.h
-@@ -23,11 +23,16 @@ RTC_OBJC_EXPORT
+@@ -23,11 +23,15 @@ RTC_OBJC_EXPORT
  /** Public key in an x509 cert encoded in PEM. */
  @property(nonatomic, readonly, copy) NSString *certificate;
  
@@ -138,16 +138,15 @@ index 5ac8984d4a..22189df492 100644
  - (instancetype)initWithPrivateKey:(NSString *)private_key
 -                       certificate:(NSString *)certificate NS_DESIGNATED_INITIALIZER;
 +                       certificate:(NSString *)certificate
-+                       fingerprint:(NSString *)fingerprint
-+                NS_DESIGNATED_INITIALIZER;
++                       fingerprint:(NSString *)fingerprint NS_DESIGNATED_INITIALIZER;
  
  - (instancetype)init NS_UNAVAILABLE;
  
 diff --git a/sdk/objc/api/peerconnection/RTCCertificate.mm b/sdk/objc/api/peerconnection/RTCCertificate.mm
-index e5c33e407c..55d57469ff 100644
+index e5c33e407c..853b0aad0a 100644
 --- a/sdk/objc/api/peerconnection/RTCCertificate.mm
 +++ b/sdk/objc/api/peerconnection/RTCCertificate.mm
-@@ -20,17 +20,20 @@
+@@ -20,17 +20,22 @@
  
  @synthesize private_key = _private_key;
  @synthesize certificate = _certificate;
@@ -162,7 +161,9 @@ index e5c33e407c..55d57469ff 100644
  }
  
 -- (instancetype)initWithPrivateKey:(NSString *)private_key certificate:(NSString *)certificate {
-+- (instancetype)initWithPrivateKey:(NSString *)private_key certificate:(NSString *)certificate fingerprint:(NSString *)fingerprint {
++- (instancetype)initWithPrivateKey:(NSString *)private_key
++                       certificate:(NSString *)certificate
++                       fingerprint:(NSString *)fingerprint {
    if (self = [super init]) {
      _private_key = [private_key copy];
      _certificate = [certificate copy];
@@ -170,7 +171,7 @@ index e5c33e407c..55d57469ff 100644
    }
    return self;
  }
-@@ -60,12 +63,14 @@
+@@ -60,12 +65,14 @@
    rtc::RTCCertificatePEM pem = cc_certificate->ToPEM();
    std::string pem_private_key = pem.private_key();
    std::string pem_certificate = pem.certificate();
@@ -187,7 +188,7 @@ index e5c33e407c..55d57469ff 100644
  }
  
 diff --git a/sdk/objc/api/peerconnection/RTCConfiguration.mm b/sdk/objc/api/peerconnection/RTCConfiguration.mm
-index e7838b8578..d5a9ebcdef 100644
+index 8e42cb2a82..5f1866af14 100644
 --- a/sdk/objc/api/peerconnection/RTCConfiguration.mm
 +++ b/sdk/objc/api/peerconnection/RTCConfiguration.mm
 @@ -88,7 +88,8 @@
@@ -200,13 +201,14 @@ index e7838b8578..d5a9ebcdef 100644
      }
      _iceTransportPolicy =
          [[self class] transportPolicyForTransportsType:config.type];
-@@ -237,7 +238,8 @@
+@@ -235,7 +236,9 @@
      RTC_LOG(LS_INFO) << "Have configured cert - using it.";
      std::string pem_private_key = [[_certificate private_key] UTF8String];
      std::string pem_certificate = [[_certificate certificate] UTF8String];
 -    rtc::RTCCertificatePEM pem = rtc::RTCCertificatePEM(pem_private_key, pem_certificate);
 +    std::string pem_fingerprint = [[_certificate fingerprint] UTF8String];
-+    rtc::RTCCertificatePEM pem = rtc::RTCCertificatePEM(pem_private_key, pem_certificate, pem_fingerprint);
++    rtc::RTCCertificatePEM pem =
++        rtc::RTCCertificatePEM(pem_private_key, pem_certificate, pem_fingerprint);
      rtc::scoped_refptr<rtc::RTCCertificate> certificate = rtc::RTCCertificate::FromPEM(pem);
      RTC_LOG(LS_INFO) << "Created cert from PEM strings.";
      if (!certificate) {

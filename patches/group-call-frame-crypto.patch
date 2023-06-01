@@ -1,8 +1,8 @@
 diff --git a/pc/BUILD.gn b/pc/BUILD.gn
-index 15c87dda25..7d6a641962 100644
+index 48c8879145..00cbca339e 100644
 --- a/pc/BUILD.gn
 +++ b/pc/BUILD.gn
-@@ -1224,6 +1224,26 @@ rtc_source_set("peer_connection") {
+@@ -1260,6 +1260,26 @@ rtc_source_set("peer_connection") {
    ]
  }
  
@@ -1962,10 +1962,10 @@ index 0000000000..cd38b1ba00
 +}
 +#endif
 diff --git a/sdk/BUILD.gn b/sdk/BUILD.gn
-index a01cf96ebb..2ef595cc77 100644
+index ff89b21721..6ddc3e58e6 100644
 --- a/sdk/BUILD.gn
 +++ b/sdk/BUILD.gn
-@@ -1039,6 +1039,15 @@ if (is_ios || is_mac) {
+@@ -1046,6 +1046,15 @@ if (is_ios || is_mac) {
          "objc/api/peerconnection/RTCVideoTrack+Private.h",
          "objc/api/peerconnection/RTCVideoTrack.h",
          "objc/api/peerconnection/RTCVideoTrack.mm",
@@ -1981,7 +1981,7 @@ index a01cf96ebb..2ef595cc77 100644
        ]
  
        configs += [
-@@ -1063,6 +1072,7 @@ if (is_ios || is_mac) {
+@@ -1070,6 +1079,7 @@ if (is_ios || is_mac) {
          ":videosource_objc",
          ":videotoolbox_objc",
          "../api:dtmf_sender_interface",
@@ -1989,15 +1989,15 @@ index a01cf96ebb..2ef595cc77 100644
          "../api:libjingle_peerconnection_api",
          "../api:media_stream_interface",
          "../api:rtc_event_log_output_file",
-@@ -1089,6 +1099,7 @@ if (is_ios || is_mac) {
+@@ -1097,6 +1107,7 @@ if (is_ios || is_mac) {
          "../modules/audio_processing:api",
          "../modules/video_coding:video_codec_interface",
          "../pc:peer_connection_factory",
 +        "../pc:threema_group_call_frame_transformer",
          "../pc:webrtc_sdp",
-         "../rtc_base",
          "../rtc_base:checks",
-@@ -1102,6 +1113,7 @@ if (is_ios || is_mac) {
+         "../rtc_base:event_tracer",
+@@ -1111,6 +1122,7 @@ if (is_ios || is_mac) {
          "../stats:rtc_stats",
          "../system_wrappers:field_trial",
          "../system_wrappers:metrics",
@@ -2015,7 +2015,7 @@ index a01cf96ebb..2ef595cc77 100644
            "objc/api/video_codec/RTCVideoCodecConstants.h",
            "objc/api/video_codec/RTCVideoDecoderVP8.h",
            "objc/api/video_codec/RTCVideoDecoderVP9.h",
-@@ -1456,6 +1471,9 @@ if (is_ios || is_mac) {
+@@ -1458,6 +1473,9 @@ if (is_ios || is_mac) {
            "objc/api/peerconnection/RTCTracing.h",
            "objc/api/peerconnection/RTCVideoSource.h",
            "objc/api/peerconnection/RTCVideoTrack.h",
@@ -2026,7 +2026,7 @@ index a01cf96ebb..2ef595cc77 100644
            "objc/api/video_codec/RTCVideoDecoderVP8.h",
            "objc/api/video_codec/RTCVideoDecoderVP9.h",
 diff --git a/sdk/android/BUILD.gn b/sdk/android/BUILD.gn
-index 8ef08a3a5b..92fc4416c5 100644
+index 5bf25ffc6d..208b0adaea 100644
 --- a/sdk/android/BUILD.gn
 +++ b/sdk/android/BUILD.gn
 @@ -296,6 +296,7 @@ if (is_android) {
@@ -2037,7 +2037,7 @@ index 8ef08a3a5b..92fc4416c5 100644
        "api/org/webrtc/TurnCustomizer.java",
        "api/org/webrtc/VideoProcessor.java",
        "api/org/webrtc/VideoSource.java",
-@@ -752,6 +753,8 @@ if (current_os == "linux" || is_android) {
+@@ -750,6 +751,8 @@ if (current_os == "linux" || is_android) {
        "src/jni/pc/ssl_certificate_verifier_wrapper.h",
        "src/jni/pc/stats_observer.cc",
        "src/jni/pc/stats_observer.h",
@@ -2046,7 +2046,7 @@ index 8ef08a3a5b..92fc4416c5 100644
        "src/jni/pc/turn_customizer.cc",
        "src/jni/pc/turn_customizer.h",
      ]
-@@ -766,6 +769,7 @@ if (current_os == "linux" || is_android) {
+@@ -764,6 +767,7 @@ if (current_os == "linux" || is_android) {
        "..:media_constraints",
        "../../api:callfactory_api",
        "../../api:dtmf_sender_interface",
@@ -2054,14 +2054,14 @@ index 8ef08a3a5b..92fc4416c5 100644
        "../../api:libjingle_peerconnection_api",
        "../../api:media_stream_interface",
        "../../api:rtc_event_log_output_file",
-@@ -783,6 +787,7 @@ if (current_os == "linux" || is_android) {
+@@ -781,6 +785,7 @@ if (current_os == "linux" || is_android) {
        "../../modules/audio_processing:api",
        "../../modules/utility",
        "../../pc:media_stream_observer",
 +      "../../pc:threema_group_call_frame_transformer",
        "../../pc:webrtc_sdp",
-       "../../rtc_base",
        "../../rtc_base:checks",
+       "../../rtc_base:event_tracer",
 @@ -794,6 +799,7 @@ if (current_os == "linux" || is_android) {
        "../../rtc_base:stringutils",
        "../../rtc_base:threading",
@@ -2070,7 +2070,7 @@ index 8ef08a3a5b..92fc4416c5 100644
      ]
      absl_deps = [
        "//third_party/abseil-cpp/absl/memory",
-@@ -1406,6 +1412,7 @@ if (current_os == "linux" || is_android) {
+@@ -1400,6 +1406,7 @@ if (current_os == "linux" || is_android) {
        "api/org/webrtc/SessionDescription.java",
        "api/org/webrtc/StatsObserver.java",
        "api/org/webrtc/StatsReport.java",

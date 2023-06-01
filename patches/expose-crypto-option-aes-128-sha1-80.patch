@@ -1,8 +1,8 @@
 diff --git a/sdk/android/api/org/webrtc/CryptoOptions.java b/sdk/android/api/org/webrtc/CryptoOptions.java
-index 77b9552aad..f63cf0cffb 100644
+index 6e06bc6426..1745babab7 100644
 --- a/sdk/android/api/org/webrtc/CryptoOptions.java
 +++ b/sdk/android/api/org/webrtc/CryptoOptions.java
-@@ -34,16 +34,26 @@ public final class CryptoOptions {
+@@ -34,6 +34,11 @@ public final class CryptoOptions {
       * other ciphers get preferred.
       */
      private final boolean enableAes128Sha1_32CryptoCipher;
@@ -14,24 +14,19 @@ index 77b9552aad..f63cf0cffb 100644
      /**
       * If set to true, encrypted RTP header extensions as defined in RFC 6904
       * will be negotiated. They will only be used if both peers support them.
-      */
+@@ -41,9 +46,10 @@ public final class CryptoOptions {
      private final boolean enableEncryptedRtpHeaderExtensions;
  
--    private Srtp(boolean enableGcmCryptoSuites, boolean enableAes128Sha1_32CryptoCipher,
+     private Srtp(boolean enableGcmCryptoSuites, boolean enableAes128Sha1_32CryptoCipher,
 -        boolean enableEncryptedRtpHeaderExtensions) {
-+    private Srtp(
-+      boolean enableGcmCryptoSuites,
-+      boolean enableAes128Sha1_32CryptoCipher,
-+      boolean enableAes128Sha1_80CryptoCipher,
-+      boolean enableEncryptedRtpHeaderExtensions
-+    ) {
++        boolean enableAes128Sha1_80CryptoCipher, boolean enableEncryptedRtpHeaderExtensions) {
        this.enableGcmCryptoSuites = enableGcmCryptoSuites;
        this.enableAes128Sha1_32CryptoCipher = enableAes128Sha1_32CryptoCipher;
 +      this.enableAes128Sha1_80CryptoCipher = enableAes128Sha1_80CryptoCipher;
        this.enableEncryptedRtpHeaderExtensions = enableEncryptedRtpHeaderExtensions;
      }
  
-@@ -57,6 +67,11 @@ public final class CryptoOptions {
+@@ -57,6 +63,11 @@ public final class CryptoOptions {
        return enableAes128Sha1_32CryptoCipher;
      }
  
@@ -43,30 +38,21 @@ index 77b9552aad..f63cf0cffb 100644
      @CalledByNative("Srtp")
      public boolean getEnableEncryptedRtpHeaderExtensions() {
        return enableEncryptedRtpHeaderExtensions;
-@@ -87,10 +102,19 @@ public final class CryptoOptions {
-   private final Srtp srtp;
+@@ -88,9 +99,10 @@ public final class CryptoOptions {
    private final SFrame sframe;
  
--  private CryptoOptions(boolean enableGcmCryptoSuites, boolean enableAes128Sha1_32CryptoCipher,
+   private CryptoOptions(boolean enableGcmCryptoSuites, boolean enableAes128Sha1_32CryptoCipher,
 -      boolean enableEncryptedRtpHeaderExtensions, boolean requireFrameEncryption) {
-+  private CryptoOptions(
-+      boolean enableGcmCryptoSuites,
-+      boolean enableAes128Sha1_32CryptoCipher,
-+      boolean enableAes128Sha1_80CryptoCipher,
-+      boolean enableEncryptedRtpHeaderExtensions,
-+      boolean requireFrameEncryption
-+    ) {
-     this.srtp = new Srtp(
+-    this.srtp = new Srtp(
 -        enableGcmCryptoSuites, enableAes128Sha1_32CryptoCipher, enableEncryptedRtpHeaderExtensions);
-+      enableGcmCryptoSuites,
-+      enableAes128Sha1_32CryptoCipher,
-+      enableAes128Sha1_80CryptoCipher,
-+      enableEncryptedRtpHeaderExtensions
-+    );
++      boolean enableAes128Sha1_80CryptoCipher, boolean enableEncryptedRtpHeaderExtensions,
++      boolean requireFrameEncryption) {
++    this.srtp = new Srtp(enableGcmCryptoSuites, enableAes128Sha1_32CryptoCipher,
++        enableAes128Sha1_80CryptoCipher, enableEncryptedRtpHeaderExtensions);
      this.sframe = new SFrame(requireFrameEncryption);
    }
  
-@@ -111,6 +135,7 @@ public final class CryptoOptions {
+@@ -111,6 +123,7 @@ public final class CryptoOptions {
    public static class Builder {
      private boolean enableGcmCryptoSuites;
      private boolean enableAes128Sha1_32CryptoCipher;
@@ -74,7 +60,7 @@ index 77b9552aad..f63cf0cffb 100644
      private boolean enableEncryptedRtpHeaderExtensions;
      private boolean requireFrameEncryption;
  
-@@ -126,6 +151,11 @@ public final class CryptoOptions {
+@@ -126,6 +139,11 @@ public final class CryptoOptions {
        return this;
      }
  
@@ -86,19 +72,13 @@ index 77b9552aad..f63cf0cffb 100644
      public Builder setEnableEncryptedRtpHeaderExtensions(
          boolean enableEncryptedRtpHeaderExtensions) {
        this.enableEncryptedRtpHeaderExtensions = enableEncryptedRtpHeaderExtensions;
-@@ -138,8 +168,13 @@ public final class CryptoOptions {
-     }
+@@ -139,7 +157,8 @@ public final class CryptoOptions {
  
      public CryptoOptions createCryptoOptions() {
--      return new CryptoOptions(enableGcmCryptoSuites, enableAes128Sha1_32CryptoCipher,
+       return new CryptoOptions(enableGcmCryptoSuites, enableAes128Sha1_32CryptoCipher,
 -          enableEncryptedRtpHeaderExtensions, requireFrameEncryption);
-+      return new CryptoOptions(
-+        enableGcmCryptoSuites,
-+        enableAes128Sha1_32CryptoCipher,
-+        enableAes128Sha1_80CryptoCipher,
-+        enableEncryptedRtpHeaderExtensions,
-+        requireFrameEncryption
-+      );
++          enableAes128Sha1_80CryptoCipher, enableEncryptedRtpHeaderExtensions,
++          requireFrameEncryption);
      }
    }
  }
@@ -116,10 +96,10 @@ index af5f195d98..30cb504f1b 100644
        Java_Srtp_getEnableEncryptedRtpHeaderExtensions(jni, j_srtp);
    native_crypto_options.sframe.require_frame_encryption =
 diff --git a/sdk/objc/api/peerconnection/RTCConfiguration.mm b/sdk/objc/api/peerconnection/RTCConfiguration.mm
-index eeb94939f3..b7e57dac32 100644
+index 8e42cb2a82..e7838b8578 100644
 --- a/sdk/objc/api/peerconnection/RTCConfiguration.mm
 +++ b/sdk/objc/api/peerconnection/RTCConfiguration.mm
-@@ -127,6 +127,8 @@
+@@ -131,6 +131,8 @@
                                                       .enable_gcm_crypto_suites
               srtpEnableAes128Sha1_32CryptoCipher:config.crypto_options->srtp
                                                       .enable_aes128_sha1_32_crypto_cipher
@@ -129,7 +109,7 @@ index eeb94939f3..b7e57dac32 100644
                                                       .enable_encrypted_rtp_header_extensions
                      sframeRequireFrameEncryption:config.crypto_options->sframe
 diff --git a/sdk/objc/api/peerconnection/RTCCryptoOptions.h b/sdk/objc/api/peerconnection/RTCCryptoOptions.h
-index b465bb5a73..f0f16d6280 100644
+index 7894c8d50c..dfd76d1f78 100644
 --- a/sdk/objc/api/peerconnection/RTCCryptoOptions.h
 +++ b/sdk/objc/api/peerconnection/RTCCryptoOptions.h
 @@ -33,6 +33,11 @@ RTC_OBJC_EXPORT
@@ -153,7 +133,7 @@ index b465bb5a73..f0f16d6280 100644
                       sframeRequireFrameEncryption:(BOOL)sframeRequireFrameEncryption
      NS_DESIGNATED_INITIALIZER;
 diff --git a/sdk/objc/api/peerconnection/RTCCryptoOptions.mm b/sdk/objc/api/peerconnection/RTCCryptoOptions.mm
-index a059f75599..59bc1a3cf5 100644
+index fbaa1de58d..3813b7e0fd 100644
 --- a/sdk/objc/api/peerconnection/RTCCryptoOptions.mm
 +++ b/sdk/objc/api/peerconnection/RTCCryptoOptions.mm
 @@ -14,16 +14,19 @@
