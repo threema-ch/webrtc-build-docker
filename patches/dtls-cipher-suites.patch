@@ -1,15 +1,18 @@
 diff --git a/rtc_base/openssl_stream_adapter.cc b/rtc_base/openssl_stream_adapter.cc
-index dd82e4f061..601490148a 100644
+index 9fd8c8f395..fb1400c21b 100644
 --- a/rtc_base/openssl_stream_adapter.cc
 +++ b/rtc_base/openssl_stream_adapter.cc
-@@ -1096,7 +1096,9 @@ SSL_CTX* OpenSSLStreamAdapter::SetupSSLContext() {
+@@ -1085,9 +1085,10 @@ SSL_CTX* OpenSSLStreamAdapter::SetupSSLContext() {
+   // remove HMAC-SHA256 and HMAC-SHA384 cipher suites, not GCM cipher suites
+   // with SHA256 or SHA384 as the handshake hash.
    // This matches the list of SSLClientSocketImpl in Chromium.
-   SSL_CTX_set_cipher_list(
-       ctx,
+-  SSL_CTX_set_cipher_list(
+-      ctx,
 -      "DEFAULT:!NULL:!aNULL:!SHA256:!SHA384:!aECDH:!AESGCM+AES256:!aPSK:!3DES");
-+      "ECDHE-ECDSA-CHACHA20-POLY1305:"
-+      "ECDHE-ECDSA-AES256-GCM-SHA384:"
-+      "ECDHE-ECDSA-AES128-GCM-SHA256:");
++  SSL_CTX_set_cipher_list(ctx,
++                          "ECDHE-ECDSA-CHACHA20-POLY1305:"
++                          "ECDHE-ECDSA-AES256-GCM-SHA384:"
++                          "ECDHE-ECDSA-AES128-GCM-SHA256:");
  
    if (!srtp_ciphers_.empty()) {
      if (SSL_CTX_set_tlsext_use_srtp(ctx, srtp_ciphers_.c_str())) {

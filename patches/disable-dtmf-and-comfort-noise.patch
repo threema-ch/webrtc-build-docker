@@ -1,8 +1,8 @@
 diff --git a/media/engine/webrtc_voice_engine.cc b/media/engine/webrtc_voice_engine.cc
-index b6296a1993..3db9d6a7cf 100644
+index 55cebbaa54..91bec2f630 100644
 --- a/media/engine/webrtc_voice_engine.cc
 +++ b/media/engine/webrtc_voice_engine.cc
-@@ -647,13 +647,6 @@ std::vector<AudioCodec> WebRtcVoiceEngine::CollectCodecs(
+@@ -651,13 +651,6 @@ std::vector<AudioCodec> WebRtcVoiceEngine::CollectCodecs(
    PayloadTypeMapper mapper;
    std::vector<AudioCodec> out;
  
@@ -16,7 +16,7 @@ index b6296a1993..3db9d6a7cf 100644
    auto map_format = [&mapper](const webrtc::SdpAudioFormat& format,
                                std::vector<AudioCodec>* out) {
      absl::optional<AudioCodec> opt_codec = mapper.ToAudioCodec(format);
-@@ -679,21 +672,6 @@ std::vector<AudioCodec> WebRtcVoiceEngine::CollectCodecs(
+@@ -683,21 +676,6 @@ std::vector<AudioCodec> WebRtcVoiceEngine::CollectCodecs(
              FeedbackParam(kRtcpFbParamTransportCc, kParamValueEmpty));
        }
  
@@ -38,7 +38,7 @@ index b6296a1993..3db9d6a7cf 100644
        out.push_back(codec);
  
        if (codec.name == kOpusCodecName) {
-@@ -704,20 +682,6 @@ std::vector<AudioCodec> WebRtcVoiceEngine::CollectCodecs(
+@@ -708,20 +686,6 @@ std::vector<AudioCodec> WebRtcVoiceEngine::CollectCodecs(
      }
    }
  
@@ -59,7 +59,7 @@ index b6296a1993..3db9d6a7cf 100644
    return out;
  }
  
-@@ -1631,20 +1595,6 @@ bool WebRtcVoiceMediaChannel::SetSendCodecs(
+@@ -1624,20 +1588,6 @@ bool WebRtcVoiceMediaChannel::SetSendCodecs(
      }
    }
  
@@ -80,7 +80,7 @@ index b6296a1993..3db9d6a7cf 100644
    // Scan through the list to figure out the codec to use for sending.
    absl::optional<webrtc::AudioSendStream::Config::SendCodecSpec>
        send_codec_spec;
-@@ -1683,36 +1633,6 @@ bool WebRtcVoiceMediaChannel::SetSendCodecs(
+@@ -1676,36 +1626,6 @@ bool WebRtcVoiceMediaChannel::SetSendCodecs(
    }
  
    RTC_DCHECK(voice_codec_info);

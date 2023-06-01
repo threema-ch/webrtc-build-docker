@@ -1,5 +1,5 @@
 diff --git a/api/audio_codecs/L16/audio_decoder_L16.cc b/api/audio_codecs/L16/audio_decoder_L16.cc
-index a03abe26f7..9cda97f991 100644
+index a03abe26f7..2a746dc514 100644
 --- a/api/audio_codecs/L16/audio_decoder_L16.cc
 +++ b/api/audio_codecs/L16/audio_decoder_L16.cc
 @@ -32,18 +32,14 @@ absl::optional<AudioDecoderL16::Config> AudioDecoderL16::SdpToConfig(
@@ -19,12 +19,12 @@ index a03abe26f7..9cda97f991 100644
 -  }
 -  return std::make_unique<AudioDecoderPcm16B>(config.sample_rate_hz,
 -                                              config.num_channels);
-+  return nullptr; // disabled
++  return nullptr;  // disabled
  }
  
  }  // namespace webrtc
 diff --git a/api/audio_codecs/L16/audio_encoder_L16.cc b/api/audio_codecs/L16/audio_encoder_L16.cc
-index 20259b9ad8..bda92b1a20 100644
+index 20259b9ad8..78d0b0e55d 100644
 --- a/api/audio_codecs/L16/audio_encoder_L16.cc
 +++ b/api/audio_codecs/L16/audio_encoder_L16.cc
 @@ -45,7 +45,7 @@ absl::optional<AudioEncoderL16::Config> AudioEncoderL16::SdpToConfig(
@@ -50,7 +50,7 @@ index 20259b9ad8..bda92b1a20 100644
 -    return nullptr;
 -  }
 -  return std::make_unique<AudioEncoderPcm16B>(c);
-+  return nullptr; // disabled
++  return nullptr;  // disabled
  }
  
  }  // namespace webrtc
@@ -141,7 +141,7 @@ index 4546a2eaee..8f566fd62b 100644
  
  }  // namespace webrtc
 diff --git a/api/audio_codecs/g711/audio_decoder_g711.cc b/api/audio_codecs/g711/audio_decoder_g711.cc
-index 838f7e9624..82d1a58efe 100644
+index 838f7e9624..08a039c908 100644
 --- a/api/audio_codecs/g711/audio_decoder_g711.cc
 +++ b/api/audio_codecs/g711/audio_decoder_g711.cc
 @@ -40,28 +40,14 @@ absl::optional<AudioDecoderG711::Config> AudioDecoderG711::SdpToConfig(
@@ -171,12 +171,12 @@ index 838f7e9624..82d1a58efe 100644
 -      RTC_DCHECK_NOTREACHED();
 -      return nullptr;
 -  }
-+  return nullptr; // disabled
++  return nullptr;  // disabled
  }
  
  }  // namespace webrtc
 diff --git a/api/audio_codecs/g711/audio_encoder_g711.cc b/api/audio_codecs/g711/audio_encoder_g711.cc
-index 1dca3b80d3..b313b528fa 100644
+index 1dca3b80d3..5165f6a46d 100644
 --- a/api/audio_codecs/g711/audio_encoder_g711.cc
 +++ b/api/audio_codecs/g711/audio_encoder_g711.cc
 @@ -50,9 +50,7 @@ absl::optional<AudioEncoderG711::Config> AudioEncoderG711::SdpToConfig(
@@ -218,12 +218,12 @@ index 1dca3b80d3..b313b528fa 100644
 -      return nullptr;
 -    }
 -  }
-+  return nullptr; // disabled
++  return nullptr;  // disabled
  }
  
  }  // namespace webrtc
 diff --git a/api/audio_codecs/g722/audio_decoder_g722.cc b/api/audio_codecs/g722/audio_decoder_g722.cc
-index ed7163471a..7c0fb0b982 100644
+index ed7163471a..0aa6d9f6cf 100644
 --- a/api/audio_codecs/g722/audio_decoder_g722.cc
 +++ b/api/audio_codecs/g722/audio_decoder_g722.cc
 @@ -31,26 +31,14 @@ absl::optional<AudioDecoderG722::Config> AudioDecoderG722::SdpToConfig(
@@ -251,12 +251,12 @@ index ed7163471a..7c0fb0b982 100644
 -      RTC_DCHECK_NOTREACHED();
 -      return nullptr;
 -  }
-+  return nullptr; // disabled
++  return nullptr;  // disabled
  }
  
  }  // namespace webrtc
 diff --git a/api/audio_codecs/g722/audio_encoder_g722.cc b/api/audio_codecs/g722/audio_encoder_g722.cc
-index 56a6c4da6a..bb05e5b226 100644
+index 56a6c4da6a..4a6dc98761 100644
 --- a/api/audio_codecs/g722/audio_encoder_g722.cc
 +++ b/api/audio_codecs/g722/audio_encoder_g722.cc
 @@ -47,9 +47,7 @@ absl::optional<AudioEncoderG722Config> AudioEncoderG722::SdpToConfig(
@@ -279,12 +279,12 @@ index 56a6c4da6a..bb05e5b226 100644
 -    return nullptr;
 -  }
 -  return std::make_unique<AudioEncoderG722Impl>(config, payload_type);
-+  return nullptr; // disabled
++  return nullptr;  // disabled
  }
  
  }  // namespace webrtc
 diff --git a/api/audio_codecs/ilbc/audio_decoder_ilbc.cc b/api/audio_codecs/ilbc/audio_decoder_ilbc.cc
-index c58316903a..e8d6b94790 100644
+index c58316903a..2169f9e7dd 100644
 --- a/api/audio_codecs/ilbc/audio_decoder_ilbc.cc
 +++ b/api/audio_codecs/ilbc/audio_decoder_ilbc.cc
 @@ -29,14 +29,14 @@ absl::optional<AudioDecoderIlbc::Config> AudioDecoderIlbc::SdpToConfig(
@@ -300,12 +300,12 @@ index c58316903a..e8d6b94790 100644
      absl::optional<AudioCodecPairId> /*codec_pair_id*/,
      const FieldTrialsView* field_trials) {
 -  return std::make_unique<AudioDecoderIlbcImpl>();
-+  return nullptr; // disabled
++  return nullptr;  // disabled
  }
  
  }  // namespace webrtc
 diff --git a/api/audio_codecs/ilbc/audio_encoder_ilbc.cc b/api/audio_codecs/ilbc/audio_encoder_ilbc.cc
-index b497948491..fce0527011 100644
+index b497948491..156a4b00a8 100644
 --- a/api/audio_codecs/ilbc/audio_encoder_ilbc.cc
 +++ b/api/audio_codecs/ilbc/audio_encoder_ilbc.cc
 @@ -62,9 +62,7 @@ absl::optional<AudioEncoderIlbcConfig> AudioEncoderIlbc::SdpToConfig(
@@ -328,7 +328,7 @@ index b497948491..fce0527011 100644
 -    return nullptr;
 -  }
 -  return std::make_unique<AudioEncoderIlbcImpl>(config, payload_type);
-+  return nullptr; // disabled
++  return nullptr;  // disabled
  }
  
  }  // namespace webrtc
