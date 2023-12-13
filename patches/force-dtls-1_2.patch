@@ -1,8 +1,8 @@
 diff --git a/rtc_base/openssl_stream_adapter.cc b/rtc_base/openssl_stream_adapter.cc
-index 9fd8c8f395..97bdd868d3 100644
+index 353cbbe681..2a75dd6935 100644
 --- a/rtc_base/openssl_stream_adapter.cc
 +++ b/rtc_base/openssl_stream_adapter.cc
-@@ -1016,33 +1016,10 @@ SSL_CTX* OpenSSLStreamAdapter::SetupSSLContext() {
+@@ -1031,33 +1031,10 @@ SSL_CTX* OpenSSLStreamAdapter::SetupSSLContext() {
      return nullptr;
    }
  

@@ -188,10 +188,10 @@ index e5c33e407c..853b0aad0a 100644
  }
  
 diff --git a/sdk/objc/api/peerconnection/RTCConfiguration.mm b/sdk/objc/api/peerconnection/RTCConfiguration.mm
-index 8e42cb2a82..5f1866af14 100644
+index 86ecbabf8d..ab2dac9123 100644
 --- a/sdk/objc/api/peerconnection/RTCConfiguration.mm
 +++ b/sdk/objc/api/peerconnection/RTCConfiguration.mm
-@@ -88,7 +88,8 @@
+@@ -87,7 +87,8 @@
        rtc::RTCCertificatePEM native_pem = native_cert->ToPEM();
        _certificate = [[RTC_OBJC_TYPE(RTCCertificate) alloc]
            initWithPrivateKey:@(native_pem.private_key().c_str())
@@ -201,7 +201,7 @@ index 8e42cb2a82..5f1866af14 100644
      }
      _iceTransportPolicy =
          [[self class] transportPolicyForTransportsType:config.type];
-@@ -235,7 +236,9 @@
+@@ -233,7 +234,9 @@
      RTC_LOG(LS_INFO) << "Have configured cert - using it.";
      std::string pem_private_key = [[_certificate private_key] UTF8String];
      std::string pem_certificate = [[_certificate certificate] UTF8String];
