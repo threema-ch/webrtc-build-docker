@@ -11,6 +11,7 @@ function print_usage {
     echo ""
     echo "  fetch [<revision>]"
     echo "  update"
+    echo "  sync"
     echo "  patch"
     echo "  build <${TARGETS}>"
     echo "  build-all"
@@ -113,8 +114,8 @@ case ${1-} in
         # Update sources
         docker run -it -v ${PWD}/webrtc:/webrtc threema/webrtc-build-tools:latest bash -c "
             set -euo pipefail
-            echo \"Updating source files and tracking branches\"
-            echo \"Note: This will leave all untracked branches untouched!\"
+            echo 'Updating source files and tracking branches'
+            echo 'Note: This will leave all untracked branches untouched!'
             (cd src && git rebase-update)
             echo 'Updating third party repos and running pre-compile hooks'
             gclient sync -D
