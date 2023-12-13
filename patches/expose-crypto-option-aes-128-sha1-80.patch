@@ -96,10 +96,10 @@ index af5f195d98..30cb504f1b 100644
        Java_Srtp_getEnableEncryptedRtpHeaderExtensions(jni, j_srtp);
    native_crypto_options.sframe.require_frame_encryption =
 diff --git a/sdk/objc/api/peerconnection/RTCConfiguration.mm b/sdk/objc/api/peerconnection/RTCConfiguration.mm
-index 8e42cb2a82..e7838b8578 100644
+index 86ecbabf8d..83d94a48bb 100644
 --- a/sdk/objc/api/peerconnection/RTCConfiguration.mm
 +++ b/sdk/objc/api/peerconnection/RTCConfiguration.mm
-@@ -131,6 +131,8 @@
+@@ -130,6 +130,8 @@
                                                       .enable_gcm_crypto_suites
               srtpEnableAes128Sha1_32CryptoCipher:config.crypto_options->srtp
                                                       .enable_aes128_sha1_32_crypto_cipher

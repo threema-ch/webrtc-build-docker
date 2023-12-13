@@ -39,7 +39,7 @@ index 22c5dd464b..d6840f9bbb 100644
    return crypto_suites;
  }
 diff --git a/rtc_base/openssl_stream_adapter.cc b/rtc_base/openssl_stream_adapter.cc
-index 9fd8c8f395..f414cdd35b 100644
+index 353cbbe681..23f0cc7a86 100644
 --- a/rtc_base/openssl_stream_adapter.cc
 +++ b/rtc_base/openssl_stream_adapter.cc
 @@ -77,10 +77,9 @@ struct SslCipherMapEntry {
