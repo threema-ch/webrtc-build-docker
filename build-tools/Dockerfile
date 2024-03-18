@@ -1,4 +1,4 @@
-FROM ubuntu:20.04
+FROM ubuntu:22.04
 
 # Update apt cache
 RUN apt-get update
@@ -10,8 +10,7 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     ccache \
     curl \
     git \
-    python \
-    python-setuptools \
+    python2 \
     python3 \
     python3-setuptools \
     sudo \
