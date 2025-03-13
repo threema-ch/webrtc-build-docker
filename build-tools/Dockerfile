@@ -1,4 +1,4 @@
-FROM ubuntu:22.04
+FROM debian:12
 
 # Update apt cache
 RUN apt-get update
@@ -10,7 +10,6 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     ccache \
     curl \
     git \
-    python2 \
     python3 \
     python3-setuptools \
     sudo \
@@ -26,14 +25,14 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
 ARG USERNAME=docker-webrtc
 ARG UID=1000
 ARG GID=1000
-RUN groupadd -g $GID -o $USERNAME && \
-    useradd -l -m -u $UID -g $GID -o -s /bin/bash $USERNAME && \
-    usermod -a -G sudo $USERNAME && \
-    echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+RUN groupadd -g $GID -o $USERNAME \
+ && useradd -l -m -u $UID -g $GID -o -s /bin/bash $USERNAME \
+ && usermod -a -G sudo $USERNAME \
+ && echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
 
 # Get Chromium depot tools
-RUN git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git /opt/depot_tools && \
-    chown -R $UID:$GID /opt/depot_tools
+RUN git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git /opt/depot_tools \
+ && chown -R $UID:$GID /opt/depot_tools
 ENV PATH /opt/depot_tools:$PATH
 
 # Create workdir
@@ -49,8 +48,8 @@ USER $USERNAME
 
 # Run fetch and gclient initially since this pulls a lot of data when run
 # for the first time
-RUN fetch --help > /dev/null && \
-    gclient --help > /dev/null
+RUN fetch --help > /dev/null \
+ && gclient --help > /dev/null
 
 # Set working directory
 WORKDIR /webrtc
