@@ -12,7 +12,7 @@ if [ $# -ne 1 ]; then
 fi
 revision=$1
 
-mkdir -p out && chmod 777 out
+rm -r ./out && mkdir -p ./out
 docker run --rm -ti -v "$(pwd)/out:/out" -v "$(pwd)/patches:/patches" \
     $IMAGE /bin/bash -c "
     set -euo pipefail
