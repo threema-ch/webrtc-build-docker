@@ -1,8 +1,8 @@
 diff --git a/pc/BUILD.gn b/pc/BUILD.gn
-index 6f21d00bc9..c04af8b8ae 100644
+index d46ff16d72..786e601fdc 100644
 --- a/pc/BUILD.gn
 +++ b/pc/BUILD.gn
-@@ -1177,6 +1177,26 @@ rtc_source_set("peer_connection") {
+@@ -1239,6 +1239,26 @@ rtc_source_set("peer_connection") {
    ]
  }
  
@@ -21,9 +21,9 @@ index 6f21d00bc9..c04af8b8ae 100644
 +    "../rtc_base:logging",
 +    "../rtc_base/synchronization:mutex",
 +    "../rtc_base/third_party/threema-blake2b",
++    "//third_party/abseil-cpp/absl/types:optional",
 +    "//third_party/boringssl",
 +  ]
-+  absl_deps = [ "//third_party/abseil-cpp/absl/types:optional" ]
 +}
 +
  rtc_source_set("simulcast_sdp_serializer") {
@@ -31,10 +31,10 @@ index 6f21d00bc9..c04af8b8ae 100644
    sources = [
 diff --git a/pc/threema_group_call_frame_transformer.cc b/pc/threema_group_call_frame_transformer.cc
 new file mode 100644
-index 0000000000..45bad1b805
+index 0000000000..923b8f5933
 --- /dev/null
 +++ b/pc/threema_group_call_frame_transformer.cc
-@@ -0,0 +1,812 @@
+@@ -0,0 +1,820 @@
 +/*
 + * Copyright 2022 Threema GmbH. All Rights Reserved.
 + *
@@ -311,7 +311,7 @@ index 0000000000..45bad1b805
 +GroupCallFrameEncryptor::GroupCallFrameEncryptor(
 +    std::string const tag,
 +    Codec const codec,
-+    rtc::scoped_refptr<GroupCallFrameEncryptorKeyContext> const key_ctx)
++    webrtc::scoped_refptr<GroupCallFrameEncryptorKeyContext> const key_ctx)
 +    : tag(tag),
 +      codec(codec),
 +      cipher(EVP_aead_aes_256_gcm()),
@@ -377,9 +377,9 @@ index 0000000000..45bad1b805
 +            << " Discarding invalid VP8 payload key frame, byte length < 10";
 +        return;
 +      }
-+      unencrypted_header_length = 10;
++      unencrypted_header_length = kVp8KeyFrameLength;
 +    } else {
-+      unencrypted_header_length = 3;
++      unencrypted_header_length = kVp8DeltaFrameLength;
 +    }
 +  }
 +
@@ -399,7 +399,7 @@ index 0000000000..45bad1b805
 +  // Encode additional data
 +  size_t const additional_data_length =
 +      kBaseAdditionalDataLength + unencrypted_header_length;
-+  uint8_t additional_data[additional_data_length];
++  uint8_t additional_data[kMaxAdditionalDataLength];
 +  additional_data[0] = snapshot->epoch;
 +  additional_data[1] = snapshot->ratchet_counter;
 +  std::memcpy(additional_data + 2, &snapshot->mfsn_le,
@@ -413,20 +413,22 @@ index 0000000000..45bad1b805
 +      unencrypted.size() - unencrypted_header_length;
 +  size_t const encrypted_payload_length =
 +      unencrypted_payload_length + kTagLength;
++  std::vector<uint8_t> encoded;
 +  size_t const encoded_length = unencrypted_header_length +
 +                                encrypted_payload_length +
 +                                kBaseAdditionalDataLength;
-+  uint8_t encoded[encoded_length];
-+  uint8_t* encoded_ptr = encoded;
++  encoded.reserve(encoded_length);
 +
 +  // Write unencrypted header
-+  std::memcpy(encoded_ptr, unencrypted.data(), unencrypted_header_length);
-+  encoded_ptr += unencrypted_header_length;
++  std::copy(unencrypted.data(), unencrypted.data() + unencrypted_header_length,
++            std::back_inserter(encoded));
 +
 +  // Encrypt and write encrypted payload, including the 16 byte tag
 +  {
++    uint8_t* const encrypted_buffer = encoded.data() + encoded.size();
++    encoded.resize(encoded.size() + encrypted_payload_length);
 +    size_t actual_encrypted_payload_length;
-+    if (!EVP_AEAD_CTX_seal(&aead_ctx_state.aead_ctx, encoded_ptr,
++    if (!EVP_AEAD_CTX_seal(&aead_ctx_state.aead_ctx, encrypted_buffer,
 +                           &actual_encrypted_payload_length,
 +                           encrypted_payload_length, nonce, kNonceLength,
 +                           unencrypted.data() + unencrypted_header_length,
@@ -443,25 +445,24 @@ index 0000000000..45bad1b805
 +                        << ")";
 +      return;
 +    }
-+    encoded_ptr += encrypted_payload_length;
 +  }
 +
 +  // Write the 6 byte footer
-+  std::memcpy(encoded_ptr, additional_data, kBaseAdditionalDataLength);
-+  encoded_ptr += kBaseAdditionalDataLength;
++  std::copy(additional_data, additional_data + kBaseAdditionalDataLength,
++            std::back_inserter(encoded));
 +
 +  // Update frame data
-+  RTC_DCHECK(encoded + encoded_length == encoded_ptr);
++  RTC_CHECK(encoded.size() == encoded_length);
 +  RTC_DLOG(LS_VERBOSE) << tag << " Encrypted frame (mfsn="
 +                       << le32toh(snapshot->mfsn_le)
 +                       << ", length=" << unencrypted.size() << " -> "
-+                       << encoded_length << ", ssrc=" << ssrc << ")";
-+  frame->SetData(rtc::ArrayView<const uint8_t>(encoded, encoded_length));
++                       << encoded.size() << ", ssrc=" << ssrc << ")";
++  frame->SetData(rtc::ArrayView<const uint8_t>(encoded.data(), encoded.size()));
 +  frame_dispatcher->get()->OnTransformedFrame(std::move(frame));
 +}
 +
 +void GroupCallFrameEncryptor::RegisterTransformedFrameCallback(
-+    rtc::scoped_refptr<webrtc::TransformedFrameCallback> const dispatcher) {
++    webrtc::scoped_refptr<webrtc::TransformedFrameCallback> const dispatcher) {
 +  RTC_DCHECK(frame_dispatchers.size() == 0);
 +
 +  // Add non-SSRC based dispatcher (deprecated)
@@ -471,7 +472,7 @@ index 0000000000..45bad1b805
 +}
 +
 +void GroupCallFrameEncryptor::RegisterTransformedFrameSinkCallback(
-+    rtc::scoped_refptr<webrtc::TransformedFrameCallback> const dispatcher,
++    webrtc::scoped_refptr<webrtc::TransformedFrameCallback> const dispatcher,
 +    uint32_t const ssrc) {
 +  RTC_DCHECK(frame_dispatcher == nullptr);
 +
@@ -502,7 +503,7 @@ index 0000000000..45bad1b805
 +    uint32_t const ssrc) {
 +  frame_dispatchers.erase(
 +      std::remove_if(frame_dispatchers.begin(), frame_dispatchers.end(),
-+                     [=](auto& frame_dispatcher) {
++                     [=, this](auto& frame_dispatcher) {
 +                       if (frame_dispatcher.first == ssrc) {
 +                         RTC_LOG(LS_VERBOSE)
 +                             << tag
@@ -516,7 +517,7 @@ index 0000000000..45bad1b805
 +      frame_dispatchers.end());
 +}
 +
-+rtc::scoped_refptr<webrtc::TransformedFrameCallback>*
++webrtc::scoped_refptr<webrtc::TransformedFrameCallback>*
 +GroupCallFrameEncryptor::GetFrameDispatcher(uint32_t const ssrc) {
 +  // Deprecated
 +  if (frame_dispatcher != nullptr) {
@@ -540,7 +541,7 @@ index 0000000000..45bad1b805
 +GroupCallFrameDecryptor::GroupCallFrameDecryptor(
 +    std::string const tag,
 +    Codec const codec,
-+    rtc::scoped_refptr<GroupCallFrameDecryptorKeysContext> const keys_ctx)
++    webrtc::scoped_refptr<GroupCallFrameDecryptorKeysContext> const keys_ctx)
 +    : tag(tag),
 +      codec(codec),
 +      cipher(EVP_aead_aes_256_gcm()),
@@ -582,9 +583,9 @@ index 0000000000..45bad1b805
 +    }
 +    return;
 +  }
-+  if (encrypted.size() > kMaxUnencryptedFrameLength) {
++  if (encrypted.size() > kMaxEncryptedFrameLength) {
 +    RTC_LOG(LS_WARNING) << tag << " Discarding encrypted frame exceeding "
-+                        << kMaxUnencryptedFrameLength << " bytes";
++                        << kMaxEncryptedFrameLength << " bytes";
 +    return;
 +  }
 +
@@ -599,9 +600,9 @@ index 0000000000..45bad1b805
 +    bool const isKeyFrame = (encrypted[0] & 0x01) == 0;
 +    if (isKeyFrame) {
 +      RTC_DLOG(LS_VERBOSE) << tag << " Got a VP8 keyframe";
-+      unencrypted_header_length = 10;
++      unencrypted_header_length = kVp8KeyFrameLength;
 +    } else {
-+      unencrypted_header_length = 3;
++      unencrypted_header_length = kVp8DeltaFrameLength;
 +    }
 +  }
 +
@@ -641,7 +642,7 @@ index 0000000000..45bad1b805
 +  // Encode additional data
 +  size_t const additional_data_length =
 +      kBaseAdditionalDataLength + unencrypted_header_length;
-+  uint8_t additional_data[additional_data_length];
++  uint8_t additional_data[kMaxAdditionalDataLength];
 +  std::memcpy(additional_data, footer, kBaseAdditionalDataLength);
 +  std::memcpy(additional_data + kBaseAdditionalDataLength, encrypted.data(),
 +              unencrypted_header_length);
@@ -650,22 +651,26 @@ index 0000000000..45bad1b805
 +  size_t const encrypted_payload_length =
 +      encrypted.size() - unencrypted_header_length - kBaseAdditionalDataLength;
 +  size_t const decrypted_payload_length = encrypted_payload_length - kTagLength;
++  std::vector<uint8_t> decoded;
 +  size_t const decoded_length =
 +      unencrypted_header_length + decrypted_payload_length;
-+  uint8_t decoded[decoded_length];
++  decoded.reserve(decoded_length);
 +
 +  // Write unencrypted header
-+  std::memcpy(decoded, encrypted.data(), unencrypted_header_length);
++  std::copy(encrypted.data(), encrypted.data() + unencrypted_header_length,
++            std::back_inserter(decoded));
 +
 +  // Decrypt the encrypted payload, including the 16 byte tag
 +  {
++    uint8_t* const decrypted_buffer = decoded.data() + decoded.size();
++    decoded.resize(decoded.size() + decrypted_payload_length);
 +    size_t actual_decrypted_payload_length;
-+    if (!EVP_AEAD_CTX_open(
-+            &aead_ctx_state.aead_ctx, decoded + unencrypted_header_length,
-+            &actual_decrypted_payload_length, decrypted_payload_length, nonce,
-+            kNonceLength, encrypted.data() + unencrypted_header_length,
-+            encrypted_payload_length, additional_data,
-+            additional_data_length)) {
++    if (!EVP_AEAD_CTX_open(&aead_ctx_state.aead_ctx, decrypted_buffer,
++                           &actual_decrypted_payload_length,
++                           decrypted_payload_length, nonce, kNonceLength,
++                           encrypted.data() + unencrypted_header_length,
++                           encrypted_payload_length, additional_data,
++                           additional_data_length)) {
 +      RTC_LOG(LS_WARNING) << tag << " Unable to decrypt data";
 +      return;
 +    }
@@ -680,16 +685,17 @@ index 0000000000..45bad1b805
 +  }
 +
 +  // Update frame data
++  RTC_CHECK(decoded.size() == decoded_length);
 +  RTC_DLOG(LS_VERBOSE) << tag
 +                       << " Decrypted frame (mfsn=" << le32toh(snapshot.mfsn_le)
 +                       << ", length=" << encrypted.size() << " -> "
-+                       << decoded_length << ", ssrc=" << ssrc << ")";
-+  frame->SetData(rtc::ArrayView<const uint8_t>(decoded, decoded_length));
++                       << decoded.size() << ", ssrc=" << ssrc << ")";
++  frame->SetData(rtc::ArrayView<const uint8_t>(decoded.data(), decoded.size()));
 +  frame_dispatcher->get()->OnTransformedFrame(std::move(frame));
 +}
 +
 +void GroupCallFrameDecryptor::RegisterTransformedFrameCallback(
-+    rtc::scoped_refptr<webrtc::TransformedFrameCallback> const dispatcher) {
++    webrtc::scoped_refptr<webrtc::TransformedFrameCallback> const dispatcher) {
 +  RTC_DCHECK(frame_dispatchers.size() == 0);
 +
 +  // Add non-SSRC based dispatcher (deprecated)
@@ -699,7 +705,7 @@ index 0000000000..45bad1b805
 +}
 +
 +void GroupCallFrameDecryptor::RegisterTransformedFrameSinkCallback(
-+    rtc::scoped_refptr<webrtc::TransformedFrameCallback> const dispatcher,
++    webrtc::scoped_refptr<webrtc::TransformedFrameCallback> const dispatcher,
 +    uint32_t const ssrc) {
 +  RTC_DCHECK(frame_dispatcher == nullptr);
 +
@@ -730,7 +736,7 @@ index 0000000000..45bad1b805
 +    uint32_t const ssrc) {
 +  frame_dispatchers.erase(
 +      std::remove_if(frame_dispatchers.begin(), frame_dispatchers.end(),
-+                     [=](auto& frame_dispatcher) {
++                     [=, this](auto& frame_dispatcher) {
 +                       if (frame_dispatcher.first == ssrc) {
 +                         RTC_LOG(LS_VERBOSE)
 +                             << tag
@@ -744,7 +750,7 @@ index 0000000000..45bad1b805
 +      frame_dispatchers.end());
 +}
 +
-+rtc::scoped_refptr<webrtc::TransformedFrameCallback>*
++webrtc::scoped_refptr<webrtc::TransformedFrameCallback>*
 +GroupCallFrameDecryptor::GetFrameDispatcher(uint32_t const ssrc) {
 +  // Deprecated
 +  if (frame_dispatcher != nullptr) {
@@ -767,7 +773,8 @@ index 0000000000..45bad1b805
 + */
 +GroupCallFrameEncryptorContext::GroupCallFrameEncryptorContext(
 +    uint8_t const gckh[kKeyLength])
-+    : key_ctx(rtc::make_ref_counted<GroupCallFrameEncryptorKeyContext>(gckh)) {}
++    : key_ctx(
++          webrtc::make_ref_counted<GroupCallFrameEncryptorKeyContext>(gckh)) {}
 +
 +void GroupCallFrameEncryptorContext::SetPcmk(uint8_t const pcmk[kKeyLength],
 +                                             uint8_t const epoch,
@@ -775,10 +782,10 @@ index 0000000000..45bad1b805
 +  key_ctx->SetPcmk(pcmk, epoch, ratchet_counter);
 +}
 +
-+rtc::scoped_refptr<GroupCallFrameEncryptor>
++webrtc::scoped_refptr<GroupCallFrameEncryptor>
 +GroupCallFrameEncryptorContext::CreateEncryptor(std::string const tag,
 +                                                Codec const codec) {
-+  return rtc::make_ref_counted<GroupCallFrameEncryptor>(tag, codec, key_ctx);
++  return webrtc::make_ref_counted<GroupCallFrameEncryptor>(tag, codec, key_ctx);
 +}
 +
 +/*
@@ -789,7 +796,7 @@ index 0000000000..45bad1b805
 +    uint16_t const participant_id)
 +    : participant_id(participant_id),
 +      keys_ctx(
-+          rtc::make_ref_counted<GroupCallFrameDecryptorKeysContext>(gckh)) {}
++          webrtc::make_ref_counted<GroupCallFrameDecryptorKeysContext>(gckh)) {}
 +
 +void GroupCallFrameDecryptorContext::AddPcmk(uint8_t const pcmk[kKeyLength],
 +                                             uint8_t const epoch,
@@ -797,10 +804,11 @@ index 0000000000..45bad1b805
 +  keys_ctx->AddPcmk(pcmk, epoch, ratchet_counter);
 +}
 +
-+rtc::scoped_refptr<GroupCallFrameDecryptor>
++webrtc::scoped_refptr<GroupCallFrameDecryptor>
 +GroupCallFrameDecryptorContext::CreateDecryptor(std::string const tag,
 +                                                Codec const codec) {
-+  return rtc::make_ref_counted<GroupCallFrameDecryptor>(tag, codec, keys_ctx);
++  return webrtc::make_ref_counted<GroupCallFrameDecryptor>(tag, codec,
++                                                           keys_ctx);
 +}
 +
 +/*
@@ -849,10 +857,10 @@ index 0000000000..45bad1b805
 +}  // namespace threema
 diff --git a/pc/threema_group_call_frame_transformer.h b/pc/threema_group_call_frame_transformer.h
 new file mode 100644
-index 0000000000..33c641e3a7
+index 0000000000..69db90a08e
 --- /dev/null
 +++ b/pc/threema_group_call_frame_transformer.h
-@@ -0,0 +1,225 @@
+@@ -0,0 +1,232 @@
 +/*
 + * Copyright 2022 Threema GmbH. All Rights Reserved.
 + *
@@ -879,9 +887,14 @@ index 0000000000..33c641e3a7
 +constexpr size_t kKeyLength = 32;
 +constexpr size_t kNonceLength = 12;
 +constexpr size_t kBaseAdditionalDataLength = 6;
++constexpr size_t kVp8DeltaFrameLength = 3;
++constexpr size_t kVp8KeyFrameLength = 10;
 +constexpr size_t kTagLength = 16;
 +
-+constexpr size_t kMaxEncryptedFrameLength = 131072;
++constexpr size_t kMaxAdditionalDataLength =
++    kBaseAdditionalDataLength +
++    std::max(kVp8DeltaFrameLength, kVp8KeyFrameLength);
++constexpr size_t kMaxEncryptedFrameLength = 1048576;
 +constexpr size_t kMaxUnencryptedFrameLength =
 +    kMaxEncryptedFrameLength - kTagLength - kBaseAdditionalDataLength;
 +
@@ -916,7 +929,7 @@ index 0000000000..33c641e3a7
 +  uint_fast8_t ratchet_counter;
 +};
 +
-+class GroupCallFrameEncryptorKeyContext : public rtc::RefCountInterface {
++class GroupCallFrameEncryptorKeyContext : public webrtc::RefCountInterface {
 + public:
 +  explicit GroupCallFrameEncryptorKeyContext(uint8_t const gckh[kKeyLength]);
 +
@@ -934,7 +947,7 @@ index 0000000000..33c641e3a7
 +  GroupCallFrameCryptoKeyState state RTC_GUARDED_BY(mutex);
 +};
 +
-+class GroupCallFrameDecryptorKeysContext : public rtc::RefCountInterface {
++class GroupCallFrameDecryptorKeysContext : public webrtc::RefCountInterface {
 + public:
 +  explicit GroupCallFrameDecryptorKeysContext(uint8_t const gckh[kKeyLength]);
 +
@@ -962,33 +975,34 @@ index 0000000000..33c641e3a7
 +  explicit GroupCallFrameEncryptor(
 +      std::string const tag,
 +      Codec const codec,
-+      rtc::scoped_refptr<GroupCallFrameEncryptorKeyContext> const key_ctx);
++      webrtc::scoped_refptr<GroupCallFrameEncryptorKeyContext> const key_ctx);
 +  ~GroupCallFrameEncryptor() override;
 +
 +  void Transform(
 +      std::unique_ptr<webrtc::TransformableFrameInterface> frame) override;
 +  void RegisterTransformedFrameCallback(
-+      rtc::scoped_refptr<webrtc::TransformedFrameCallback> const dispatcher)
++      webrtc::scoped_refptr<webrtc::TransformedFrameCallback> const dispatcher)
 +      override;
 +  void RegisterTransformedFrameSinkCallback(
-+      rtc::scoped_refptr<webrtc::TransformedFrameCallback> const dispatcher,
++      webrtc::scoped_refptr<webrtc::TransformedFrameCallback> const dispatcher,
 +      uint32_t const ssrc) override;
 +  void UnregisterTransformedFrameCallback() override;
 +  void UnregisterTransformedFrameSinkCallback(uint32_t const ssrc) override;
 +
 + private:
-+  rtc::scoped_refptr<webrtc::TransformedFrameCallback>* GetFrameDispatcher(
++  webrtc::scoped_refptr<webrtc::TransformedFrameCallback>* GetFrameDispatcher(
 +      uint32_t const ssrc);
 +
 +  std::string const tag;
 +  Codec const codec;
 +  EVP_AEAD const* const cipher;
-+  rtc::scoped_refptr<GroupCallFrameEncryptorKeyContext> const key_ctx;
++  webrtc::scoped_refptr<GroupCallFrameEncryptorKeyContext> const key_ctx;
 +  GroupCallFrameCryptoAeadCtxState aead_ctx_state;
-+  rtc::scoped_refptr<webrtc::TransformedFrameCallback> frame_dispatcher =
++  webrtc::scoped_refptr<webrtc::TransformedFrameCallback> frame_dispatcher =
 +      nullptr;
 +  std::vector<
-+      std::pair<uint32_t, rtc::scoped_refptr<webrtc::TransformedFrameCallback>>>
++      std::pair<uint32_t,
++                webrtc::scoped_refptr<webrtc::TransformedFrameCallback>>>
 +      frame_dispatchers;
 +};
 +
@@ -997,33 +1011,34 @@ index 0000000000..33c641e3a7
 +  explicit GroupCallFrameDecryptor(
 +      std::string const tag,
 +      Codec const codec,
-+      rtc::scoped_refptr<GroupCallFrameDecryptorKeysContext> const keys_ctx);
++      webrtc::scoped_refptr<GroupCallFrameDecryptorKeysContext> const keys_ctx);
 +  ~GroupCallFrameDecryptor() override;
 +
 +  void Transform(
 +      std::unique_ptr<webrtc::TransformableFrameInterface> frame) override;
 +  void RegisterTransformedFrameCallback(
-+      rtc::scoped_refptr<webrtc::TransformedFrameCallback> const dispatcher)
++      webrtc::scoped_refptr<webrtc::TransformedFrameCallback> const dispatcher)
 +      override;
 +  void RegisterTransformedFrameSinkCallback(
-+      rtc::scoped_refptr<webrtc::TransformedFrameCallback> const dispatcher,
++      webrtc::scoped_refptr<webrtc::TransformedFrameCallback> const dispatcher,
 +      uint32_t const ssrc) override;
 +  void UnregisterTransformedFrameCallback() override;
 +  void UnregisterTransformedFrameSinkCallback(uint32_t const ssrc) override;
 +
 + private:
-+  rtc::scoped_refptr<webrtc::TransformedFrameCallback>* GetFrameDispatcher(
++  webrtc::scoped_refptr<webrtc::TransformedFrameCallback>* GetFrameDispatcher(
 +      uint32_t const ssrc);
 +
 +  std::string const tag;
 +  Codec const codec;
 +  EVP_AEAD const* const cipher;
-+  rtc::scoped_refptr<GroupCallFrameDecryptorKeysContext> const keys_ctx;
++  webrtc::scoped_refptr<GroupCallFrameDecryptorKeysContext> const keys_ctx;
 +  GroupCallFrameCryptoAeadCtxState aead_ctx_state;
-+  rtc::scoped_refptr<webrtc::TransformedFrameCallback> frame_dispatcher =
++  webrtc::scoped_refptr<webrtc::TransformedFrameCallback> frame_dispatcher =
 +      nullptr;
 +  std::vector<
-+      std::pair<uint32_t, rtc::scoped_refptr<webrtc::TransformedFrameCallback>>>
++      std::pair<uint32_t,
++                webrtc::scoped_refptr<webrtc::TransformedFrameCallback>>>
 +      frame_dispatchers;
 +};
 +
@@ -1034,12 +1049,12 @@ index 0000000000..33c641e3a7
 +  void SetPcmk(uint8_t const pcmk[kKeyLength],
 +               uint8_t const epoch,
 +               uint8_t const ratchet_counter);
-+  rtc::scoped_refptr<GroupCallFrameEncryptor> CreateEncryptor(
++  webrtc::scoped_refptr<GroupCallFrameEncryptor> CreateEncryptor(
 +      std::string const tag,
 +      Codec const codec);
 +
 + private:
-+  rtc::scoped_refptr<GroupCallFrameEncryptorKeyContext> const key_ctx;
++  webrtc::scoped_refptr<GroupCallFrameEncryptorKeyContext> const key_ctx;
 +};
 +
 +class GroupCallFrameDecryptorContext {
@@ -1050,17 +1065,17 @@ index 0000000000..33c641e3a7
 +  void AddPcmk(uint8_t const pcmk[kKeyLength],
 +               uint8_t const epoch,
 +               uint8_t const ratchet_counter);
-+  rtc::scoped_refptr<GroupCallFrameDecryptor> CreateDecryptor(
++  webrtc::scoped_refptr<GroupCallFrameDecryptor> CreateDecryptor(
 +      std::string const tag,
 +      Codec const codec);
 +
 +  uint16_t const participant_id;
 +
 + private:
-+  rtc::scoped_refptr<GroupCallFrameDecryptorKeysContext> const keys_ctx;
++  webrtc::scoped_refptr<GroupCallFrameDecryptorKeysContext> const keys_ctx;
 +};
 +
-+class GroupCallFrameCryptoContext : public rtc::RefCountInterface {
++class GroupCallFrameCryptoContext : public webrtc::RefCountInterface {
 + public:
 +  explicit GroupCallFrameCryptoContext(uint8_t const gckh[kKeyLength]);
 +
@@ -1962,10 +1977,10 @@ index 0000000000..cd38b1ba00
 +}
 +#endif
 diff --git a/sdk/BUILD.gn b/sdk/BUILD.gn
-index a044c469e0..179d43a530 100644
+index e76b68c92e..fbc7f16b90 100644
 --- a/sdk/BUILD.gn
 +++ b/sdk/BUILD.gn
-@@ -1036,6 +1036,15 @@ if (is_ios || is_mac) {
+@@ -1053,6 +1053,15 @@ if (is_ios || is_mac) {
          "objc/api/peerconnection/RTCVideoTrack+Private.h",
          "objc/api/peerconnection/RTCVideoTrack.h",
          "objc/api/peerconnection/RTCVideoTrack.mm",
@@ -1981,23 +1996,23 @@ index a044c469e0..179d43a530 100644
        ]
  
        configs += [
-@@ -1061,6 +1070,7 @@ if (is_ios || is_mac) {
-         ":videotoolbox_objc",
+@@ -1079,6 +1088,7 @@ if (is_ios || is_mac) {
          "../api:dtmf_sender_interface",
          "../api:enable_media",
+         "../api:field_trials_view",
 +        "../api:frame_transformer_interface",
          "../api:libjingle_peerconnection_api",
          "../api:media_stream_interface",
          "../api:rtc_event_log_output_file",
-@@ -1087,6 +1097,7 @@ if (is_ios || is_mac) {
-         "../modules/audio_processing:api",
+@@ -1107,6 +1117,7 @@ if (is_ios || is_mac) {
+         "../media:rtc_media_base",
          "../modules/video_coding:video_codec_interface",
          "../pc:peer_connection_factory",
 +        "../pc:threema_group_call_frame_transformer",
          "../pc:webrtc_sdp",
          "../rtc_base:checks",
          "../rtc_base:event_tracer",
-@@ -1101,6 +1112,7 @@ if (is_ios || is_mac) {
+@@ -1122,6 +1133,7 @@ if (is_ios || is_mac) {
          "../stats:rtc_stats",
          "../system_wrappers:field_trial",
          "../system_wrappers:metrics",
@@ -2005,7 +2020,7 @@ index a044c469e0..179d43a530 100644
        ]
  
        if (is_ios) {
-@@ -1337,6 +1349,9 @@ if (is_ios || is_mac) {
+@@ -1367,6 +1379,9 @@ if (is_ios || is_mac) {
            "objc/api/peerconnection/RTCCryptoOptions.h",
            "objc/api/peerconnection/RTCVideoSource.h",
            "objc/api/peerconnection/RTCVideoTrack.h",
@@ -2015,7 +2030,7 @@ index a044c469e0..179d43a530 100644
            "objc/api/video_codec/RTCVideoCodecConstants.h",
            "objc/api/video_codec/RTCVideoDecoderVP8.h",
            "objc/api/video_codec/RTCVideoDecoderVP9.h",
-@@ -1451,6 +1466,9 @@ if (is_ios || is_mac) {
+@@ -1482,6 +1497,9 @@ if (is_ios || is_mac) {
            "objc/api/peerconnection/RTCTracing.h",
            "objc/api/peerconnection/RTCVideoSource.h",
            "objc/api/peerconnection/RTCVideoTrack.h",
@@ -2026,10 +2041,10 @@ index a044c469e0..179d43a530 100644
            "objc/api/video_codec/RTCVideoDecoderVP8.h",
            "objc/api/video_codec/RTCVideoDecoderVP9.h",
 diff --git a/sdk/android/BUILD.gn b/sdk/android/BUILD.gn
-index 87e76235ee..4fb648a867 100644
+index 340f9fd5d9..28299e54d5 100644
 --- a/sdk/android/BUILD.gn
 +++ b/sdk/android/BUILD.gn
-@@ -303,6 +303,7 @@ if (is_android) {
+@@ -314,6 +314,7 @@ if (is_android) {
        "api/org/webrtc/SessionDescription.java",
        "api/org/webrtc/StatsObserver.java",
        "api/org/webrtc/StatsReport.java",
@@ -2037,7 +2052,7 @@ index 87e76235ee..4fb648a867 100644
        "api/org/webrtc/TurnCustomizer.java",
        "api/org/webrtc/VideoProcessor.java",
        "api/org/webrtc/VideoSource.java",
-@@ -762,6 +763,8 @@ if (current_os == "linux" || is_android) {
+@@ -778,6 +779,8 @@ if (current_os == "linux" || is_android) {
        "src/jni/pc/ssl_certificate_verifier_wrapper.h",
        "src/jni/pc/stats_observer.cc",
        "src/jni/pc/stats_observer.h",
@@ -2046,7 +2061,7 @@ index 87e76235ee..4fb648a867 100644
        "src/jni/pc/turn_customizer.cc",
        "src/jni/pc/turn_customizer.h",
      ]
-@@ -776,6 +779,7 @@ if (current_os == "linux" || is_android) {
+@@ -794,6 +797,7 @@ if (current_os == "linux" || is_android) {
        "..:media_constraints",
        "../../api:dtmf_sender_interface",
        "../../api:enable_media",
@@ -2054,7 +2069,7 @@ index 87e76235ee..4fb648a867 100644
        "../../api:libjingle_peerconnection_api",
        "../../api:media_stream_interface",
        "../../api:rtc_event_log_output_file",
-@@ -794,6 +798,7 @@ if (current_os == "linux" || is_android) {
+@@ -814,6 +818,7 @@ if (current_os == "linux" || is_android) {
        "../../modules/utility",
        "../../pc:media_stream_observer",
        "../../pc:peer_connection_factory",
@@ -2062,15 +2077,15 @@ index 87e76235ee..4fb648a867 100644
        "../../pc:webrtc_sdp",
        "../../rtc_base:checks",
        "../../rtc_base:event_tracer",
-@@ -808,6 +813,7 @@ if (current_os == "linux" || is_android) {
-       "../../rtc_base:threading",
+@@ -828,6 +833,7 @@ if (current_os == "linux" || is_android) {
        "../../stats:rtc_stats",
        "../../system_wrappers:field_trial",
-+      "//third_party/boringssl",
-     ]
-     absl_deps = [
        "//third_party/abseil-cpp/absl/memory",
-@@ -1423,6 +1429,7 @@ if (current_os == "linux" || is_android) {
++      "//third_party/boringssl",
+       "//third_party/jni_zero",
+     ]
+   }
+@@ -1453,6 +1459,7 @@ if (current_os == "linux" || is_android) {
        "api/org/webrtc/SessionDescription.java",
        "api/org/webrtc/StatsObserver.java",
        "api/org/webrtc/StatsReport.java",
@@ -2080,7 +2095,7 @@ index 87e76235ee..4fb648a867 100644
      namespace = "webrtc::jni"
 diff --git a/sdk/android/api/org/webrtc/ThreemaGroupCallFrameCryptoContext.java b/sdk/android/api/org/webrtc/ThreemaGroupCallFrameCryptoContext.java
 new file mode 100644
-index 0000000000..0320976ab8
+index 0000000000..a4ba76feaa
 --- /dev/null
 +++ b/sdk/android/api/org/webrtc/ThreemaGroupCallFrameCryptoContext.java
 @@ -0,0 +1,198 @@
@@ -2281,10 +2296,10 @@ index 0000000000..0320976ab8
 +    }
 +    return nativeContext;
 +  }
-+};
++}
 diff --git a/sdk/android/src/jni/pc/threema_group_call_frame_crypto_context.cc b/sdk/android/src/jni/pc/threema_group_call_frame_crypto_context.cc
 new file mode 100644
-index 0000000000..58b8f0627f
+index 0000000000..6c225eab04
 --- /dev/null
 +++ b/sdk/android/src/jni/pc/threema_group_call_frame_crypto_context.cc
 @@ -0,0 +1,138 @@
@@ -2328,9 +2343,9 @@ index 0000000000..58b8f0627f
 +
 +static jlong JNI_ThreemaGroupCallFrameCryptoContext_Create(
 +    JNIEnv* jni,
-+    const base::android::JavaParamRef<jbyteArray>& j_gckh) {
++    const jni_zero::JavaParamRef<jbyteArray>& j_gckh) {
 +  auto* gckh = jni->GetByteArrayElements(j_gckh.obj(), nullptr);
-+  auto context = rtc::make_ref_counted<threema::GroupCallFrameCryptoContext>(
++  auto context = webrtc::make_ref_counted<threema::GroupCallFrameCryptoContext>(
 +      reinterpret_cast<uint8_t* const>(gckh));
 +  // Note: Ownership is moved to the Java object.
 +  return jlongFromPointer(context.release());
@@ -2341,7 +2356,7 @@ index 0000000000..58b8f0627f
 +static void JNI_ThreemaGroupCallFrameCryptoContext_EncryptorSetPcmk(
 +    JNIEnv* jni,
 +    jlong j_context_pointer,
-+    const base::android::JavaParamRef<jbyteArray>& j_pcmk,
++    const jni_zero::JavaParamRef<jbyteArray>& j_pcmk,
 +    jshort j_epoch,
 +    jshort j_ratchet_counter) {
 +  auto* pcmk = jni->GetByteArrayElements(j_pcmk.obj(), nullptr);
@@ -2394,7 +2409,7 @@ index 0000000000..58b8f0627f
 +    JNIEnv* jni,
 +    jlong j_context_pointer,
 +    jshort j_participant_id,
-+    const base::android::JavaParamRef<jbyteArray>& j_pcmk,
++    const jni_zero::JavaParamRef<jbyteArray>& j_pcmk,
 +    jshort j_epoch,
 +    jshort j_ratchet_counter) {
 +  auto* pcmk = jni->GetByteArrayElements(j_pcmk.obj(), nullptr);
@@ -2478,10 +2493,10 @@ index 0000000000..a290032d3c
 \ No newline at end of file
 diff --git a/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoContext.h b/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoContext.h
 new file mode 100644
-index 0000000000..96bdfd6f68
+index 0000000000..8f14f8acb5
 --- /dev/null
 +++ b/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoContext.h
-@@ -0,0 +1,74 @@
+@@ -0,0 +1,76 @@
 +#import <Foundation/Foundation.h>
 +
 +#import "RTCRtpReceiver.h"
@@ -2500,7 +2515,8 @@ index 0000000000..96bdfd6f68
 +
 +- (ThreemaGroupCallFrameCryptoEncryptor *)getEncryptor;
 +
-+- (nullable ThreemaGroupCallFrameCryptoDecryptor *)getDecryptorFor:(UInt16)participantId;
++- (nullable ThreemaGroupCallFrameCryptoDecryptor *)getDecryptorFor:
++    (UInt16)participantId;
 +
 +- (ThreemaGroupCallFrameCryptoDecryptor *)addDecryptorFor:(UInt16)participantId;
 +
@@ -2529,7 +2545,8 @@ index 0000000000..96bdfd6f68
 + * Returns the decryptor for the given participant ID iff it exists. Returns nil
 + * otherwise.
 + */
-+- (nullable ThreemaGroupCallFrameCryptoDecryptor *)getDecryptorFor:(UInt16)participantId;
++- (nullable ThreemaGroupCallFrameCryptoDecryptor *)getDecryptorFor:
++    (UInt16)participantId;
 +
 +/**
 + * Adds a decryptor for the given participant ID. After calling this it can be
@@ -2559,10 +2576,10 @@ index 0000000000..96bdfd6f68
 \ No newline at end of file
 diff --git a/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoContext.mm b/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoContext.mm
 new file mode 100644
-index 0000000000..1aebc65930
+index 0000000000..57271fe2b5
 --- /dev/null
 +++ b/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoContext.mm
-@@ -0,0 +1,117 @@
+@@ -0,0 +1,124 @@
 +#import <Foundation/Foundation.h>
 +
 +#import "RTCMediaStreamTrack.h"
@@ -2581,8 +2598,9 @@ index 0000000000..1aebc65930
 +#import "ThreemaGroupCallFrameCryptoEncryptor.h"
 +
 +@implementation ThreemaGroupCallFrameCryptoContext {
-+  rtc::scoped_refptr<threema::GroupCallFrameCryptoContext> context;
-+  NSMutableDictionary<NSString *, ThreemaGroupCallFrameCryptoDecryptor *> *decryptorDict;
++  webrtc::scoped_refptr<threema::GroupCallFrameCryptoContext> context;
++  NSMutableDictionary<NSString *, ThreemaGroupCallFrameCryptoDecryptor *>
++      *decryptorDict;
 +  ThreemaGroupCallFrameCryptoEncryptor *encryptor;
 +}
 +
@@ -2590,10 +2608,12 @@ index 0000000000..1aebc65930
 +  self = [super init];
 +  if (self) {
 +    self->context =
-+        rtc::make_ref_counted<threema::GroupCallFrameCryptoContext>((const uint8_t *)gckh.bytes);
++        webrtc::make_ref_counted<threema::GroupCallFrameCryptoContext>(
++            (const uint8_t *)gckh.bytes);
 +    self->decryptorDict = [[NSMutableDictionary alloc] init];
 +
-+    self->encryptor = [[ThreemaGroupCallFrameCryptoEncryptor alloc] initWithContext:self->context];
++    self->encryptor = [[ThreemaGroupCallFrameCryptoEncryptor alloc]
++        initWithContext:self->context];
 +  }
 +  return self;
 +}
@@ -2603,26 +2623,29 @@ index 0000000000..1aebc65930
 +  return encryptor;
 +}
 +
-+- (nullable ThreemaGroupCallFrameCryptoDecryptor *)getDecryptorFor:(UInt16)participantId {
++- (nullable ThreemaGroupCallFrameCryptoDecryptor *)getDecryptorFor:
++    (UInt16)participantId {
 +  [self ensureContext];
 +  NSString *key = [NSString stringWithFormat:@"%hu", participantId];
 +  return decryptorDict[key];
 +}
 +
-+- (ThreemaGroupCallFrameCryptoDecryptor *)addDecryptorFor:(UInt16)participantId {
++- (ThreemaGroupCallFrameCryptoDecryptor *)addDecryptorFor:
++    (UInt16)participantId {
 +  [self ensureContext];
 +  NSString *key = [NSString stringWithFormat:@"%hu", participantId];
 +
 +  if (decryptorDict[key] != nil) {
-+    @throw
-+        [NSException exceptionWithName:NSInvalidArgumentException
-+                                reason:@"Decryptor for the given participant id already existing."
-+                              userInfo:nil];
++    @throw [NSException exceptionWithName:NSInvalidArgumentException
++                                   reason:@"Decryptor for the given "
++                                          @"participant id already existing."
++                                 userInfo:nil];
 +  }
 +
 +  ThreemaGroupCallFrameCryptoDecryptor *decryptor =
-+      [[ThreemaGroupCallFrameCryptoDecryptor alloc] initWithParticipantId:participantId
-+                                                                  context:self->context];
++      [[ThreemaGroupCallFrameCryptoDecryptor alloc]
++          initWithParticipantId:participantId
++                        context:self->context];
 +  decryptorDict[key] = decryptor;
 +
 +  return decryptor;
@@ -2639,7 +2662,8 @@ index 0000000000..1aebc65930
 +    return;
 +  }
 +
-+  for (ThreemaGroupCallFrameCryptoDecryptor *decryptor in [decryptorDict allValues]) {
++  for (ThreemaGroupCallFrameCryptoDecryptor *decryptor in
++       [decryptorDict allValues]) {
 +    [decryptor remove];
 +  }
 +
@@ -2649,7 +2673,7 @@ index 0000000000..1aebc65930
 +  self->context = nil;
 +}
 +
-+- (rtc::scoped_refptr<threema::GroupCallFrameCryptoContext>)ensureContext {
++- (webrtc::scoped_refptr<threema::GroupCallFrameCryptoContext>)ensureContext {
 +  if (self->context) {
 +    return self->context;
 +  }
@@ -2683,7 +2707,7 @@ index 0000000000..1aebc65930
 \ No newline at end of file
 diff --git a/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoDecryptor+Private.h b/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoDecryptor+Private.h
 new file mode 100644
-index 0000000000..30d4069bc6
+index 0000000000..6b5ba7fa79
 --- /dev/null
 +++ b/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoDecryptor+Private.h
 @@ -0,0 +1,13 @@
@@ -2695,7 +2719,7 @@ index 0000000000..30d4069bc6
 +()
 +
 +    - (instancetype)initWithParticipantId : (UInt8)participantId context
-+    : (rtc::scoped_refptr<threema::GroupCallFrameCryptoContext>)context;
++    : (webrtc::scoped_refptr<threema::GroupCallFrameCryptoContext>)context;
 +
 +@end
 +
@@ -2703,10 +2727,10 @@ index 0000000000..30d4069bc6
 \ No newline at end of file
 diff --git a/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoDecryptor.h b/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoDecryptor.h
 new file mode 100644
-index 0000000000..14040d0254
+index 0000000000..c464ae4664
 --- /dev/null
 +++ b/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoDecryptor.h
-@@ -0,0 +1,47 @@
+@@ -0,0 +1,50 @@
 +#import <Foundation/Foundation.h>
 +
 +#import "RTCRtpReceiver.h"
@@ -2717,7 +2741,8 @@ index 0000000000..14040d0254
 +@protocol RTC_OBJC_TYPE
 +(ThreemaGroupCallFrameCryptoDecryptorProtocol)<NSObject>
 +
-+    - (void)addPcmk : (NSData *)pcmk epoch : (UInt8)epoch ratchetCounter : (UInt8)ratchetCounter;
++    - (void)addPcmk : (NSData *)pcmk epoch : (UInt8)epoch ratchetCounter
++    : (UInt8)ratchetCounter;
 +
 +- (void)attachWithReceiver:(RTCRtpReceiver *)receiver
 +                 mediaType:(RTCRtpMediaType)mediaType
@@ -2735,7 +2760,9 @@ index 0000000000..14040d0254
 +@property (nonatomic, assign, readonly) UInt16 participantId;
 +
 +/** Initialise or update the key material of the decryptor. */
-+- (void)addPcmk:(NSData *)pcmk epoch:(UInt8)epoch ratchetCounter:(UInt8)ratchetCounter;
++- (void)addPcmk:(NSData *)pcmk
++             epoch:(UInt8)epoch
++    ratchetCounter:(UInt8)ratchetCounter;
 +
 +/**
 + * Attach an RTP receiver to the decryptor, decrypting all upcoming audio/video
@@ -2757,10 +2784,10 @@ index 0000000000..14040d0254
 \ No newline at end of file
 diff --git a/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoDecryptor.mm b/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoDecryptor.mm
 new file mode 100644
-index 0000000000..737d037f93
+index 0000000000..333e319c34
 --- /dev/null
 +++ b/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoDecryptor.mm
-@@ -0,0 +1,78 @@
+@@ -0,0 +1,85 @@
 +#import <Foundation/Foundation.h>
 +
 +#import "RTCRtpReceiver+Private.h"
@@ -2772,13 +2799,14 @@ index 0000000000..737d037f93
 +#import "ThreemaGroupCallFrameCryptoDecryptor.h"
 +
 +@implementation ThreemaGroupCallFrameCryptoDecryptor {
-+  rtc::scoped_refptr<threema::GroupCallFrameCryptoContext> context;
++  webrtc::scoped_refptr<threema::GroupCallFrameCryptoContext> context;
 +}
 +
 +static const UInt16 MIDS_MAX = 790;
 +
 +- (instancetype)initWithParticipantId:(UInt16)participantId
-+                              context:(rtc::scoped_refptr<threema::GroupCallFrameCryptoContext>)
++                              context:(webrtc::scoped_refptr<
++                                          threema::GroupCallFrameCryptoContext>)
 +                                          context {
 +  self = [super init];
 +  if (self) {
@@ -2795,12 +2823,15 @@ index 0000000000..737d037f93
 +  return self;
 +}
 +
-+- (void)addPcmk:(NSData *)pcmk epoch:(UInt8)epoch ratchetCounter:(UInt8)ratchetCounter {
++- (void)addPcmk:(NSData *)pcmk
++             epoch:(UInt8)epoch
++    ratchetCounter:(UInt8)ratchetCounter {
 +  [ThreemaGroupCallFrameCryptoContext validateMediaKey:pcmk];
 +
 +  auto ensuredContext = [self ensureContext];
 +  ensuredContext->GetDecryptor((uint16_t)_participantId)
-+      .AddPcmk((const uint8_t *)pcmk.bytes, (uint8_t)epoch, (uint8_t)ratchetCounter);
++      .AddPcmk(
++          (const uint8_t *)pcmk.bytes, (uint8_t)epoch, (uint8_t)ratchetCounter);
 +}
 +
 +- (void)attachWithReceiver:(RTCRtpReceiver *)receiver
@@ -2809,10 +2840,12 @@ index 0000000000..737d037f93
 +  auto ensuredContext = [self ensureContext];
 +  auto transformer = ensuredContext->GetDecryptor((uint16_t)_participantId)
 +                         .CreateDecryptor(std::string([tag UTF8String]),
-+                                          [ThreemaGroupCallFrameCryptoContext getCodec:mediaType]);
++                                          [ThreemaGroupCallFrameCryptoContext
++                                              getCodec:mediaType]);
 +
 +  auto nativeRtpReceiver = [receiver nativeRtpReceiver];
-+  nativeRtpReceiver->SetDepacketizerToDecoderFrameTransformer(std::move(transformer));
++  nativeRtpReceiver->SetDepacketizerToDecoderFrameTransformer(
++      std::move(transformer));
 +}
 +
 +- (void)remove {
@@ -2821,7 +2854,7 @@ index 0000000000..737d037f93
 +  self->context = nil;
 +}
 +
-+- (rtc::scoped_refptr<threema::GroupCallFrameCryptoContext>)ensureContext {
++- (webrtc::scoped_refptr<threema::GroupCallFrameCryptoContext>)ensureContext {
 +  if (self->context) {
 +    return self->context;
 +  }
@@ -2832,9 +2865,10 @@ index 0000000000..737d037f93
 +
 +- (void)validateParticipantId:(UInt16)participantId {
 +  if (participantId >= MIDS_MAX) {
-+    @throw [NSException exceptionWithName:NSInvalidArgumentException
-+                                   reason:@"'participantId' must be >= 0 and < MIDS_MAX"
-+                                 userInfo:nil];
++    @throw [NSException
++        exceptionWithName:NSInvalidArgumentException
++                   reason:@"'participantId' must be >= 0 and < MIDS_MAX"
++                 userInfo:nil];
 +  }
 +}
 +
@@ -2842,7 +2876,7 @@ index 0000000000..737d037f93
 \ No newline at end of file
 diff --git a/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoEncryptor+Private.h b/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoEncryptor+Private.h
 new file mode 100644
-index 0000000000..128ec35405
+index 0000000000..493351fb57
 --- /dev/null
 +++ b/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoEncryptor+Private.h
 @@ -0,0 +1,13 @@
@@ -2854,7 +2888,7 @@ index 0000000000..128ec35405
 +()
 +
 +    - (instancetype)initWithContext
-+    : (rtc::scoped_refptr<threema::GroupCallFrameCryptoContext>)context;
++    : (webrtc::scoped_refptr<threema::GroupCallFrameCryptoContext>)context;
 +
 +@end
 +
@@ -2862,10 +2896,10 @@ index 0000000000..128ec35405
 \ No newline at end of file
 diff --git a/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoEncryptor.h b/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoEncryptor.h
 new file mode 100644
-index 0000000000..06429f8739
+index 0000000000..db1ede9eba
 --- /dev/null
 +++ b/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoEncryptor.h
-@@ -0,0 +1,38 @@
+@@ -0,0 +1,43 @@
 +#import <Foundation/Foundation.h>
 +
 +#import "RTCRtpSender.h"
@@ -2876,9 +2910,12 @@ index 0000000000..06429f8739
 +@protocol RTC_OBJC_TYPE
 +(ThreemaGroupCallFrameCryptoEncryptorProtocol)<NSObject>
 +
-+    - (void)setPcmk : (NSData *)pcmk epoch : (UInt8)epoch ratchetCounter : (UInt8)ratchetCounter;
++    - (void)setPcmk : (NSData *)pcmk epoch : (UInt8)epoch ratchetCounter
++    : (UInt8)ratchetCounter;
 +
-+- (void)attach:(RTCRtpSender *)sender mediaType:(RTCRtpMediaType)mediaType tag:(NSString *)tag;
++- (void)attach:(RTCRtpSender *)sender
++     mediaType:(RTCRtpMediaType)mediaType
++           tag:(NSString *)tag;
 +
 +@end
 +
@@ -2893,7 +2930,9 @@ index 0000000000..06429f8739
 + * Attach an RTP sender to the encryptor, encrypting all upcoming audio/video
 + * frames.
 + */
-+- (void)attach:(RTCRtpSender *)sender mediaType:(RTCRtpMediaType)mediaType tag:(NSString *)tag;
++- (void)attach:(RTCRtpSender *)sender
++     mediaType:(RTCRtpMediaType)mediaType
++           tag:(NSString *)tag;
 +
 +/**
 + * Remove the encryptor. Note that it doesn't detach from the RTP sender for
@@ -2907,10 +2946,10 @@ index 0000000000..06429f8739
 \ No newline at end of file
 diff --git a/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoEncryptor.mm b/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoEncryptor.mm
 new file mode 100644
-index 0000000000..0c085b8bf0
+index 0000000000..3524163f00
 --- /dev/null
 +++ b/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoEncryptor.mm
-@@ -0,0 +1,57 @@
+@@ -0,0 +1,64 @@
 +#import <Foundation/Foundation.h>
 +
 +#import "RTCRtpReceiver.h"
@@ -2926,10 +2965,11 @@ index 0000000000..0c085b8bf0
 +#import "ThreemaGroupCallFrameCryptoEncryptor.h"
 +
 +@implementation ThreemaGroupCallFrameCryptoEncryptor {
-+  rtc::scoped_refptr<threema::GroupCallFrameCryptoContext> context;
++  webrtc::scoped_refptr<threema::GroupCallFrameCryptoContext> context;
 +}
 +
-+- (instancetype)initWithContext:(rtc::scoped_refptr<threema::GroupCallFrameCryptoContext>)context {
++- (instancetype)initWithContext:
++    (webrtc::scoped_refptr<threema::GroupCallFrameCryptoContext>)context {
 +  self = [super init];
 +  if (self) {
 +    self->context = context;
@@ -2937,7 +2977,9 @@ index 0000000000..0c085b8bf0
 +  return self;
 +}
 +
-+- (void)setPcmk:(NSData *)pcmk epoch:(UInt8)epoch ratchetCounter:(UInt8)ratchetCounter {
++- (void)setPcmk:(NSData *)pcmk
++             epoch:(UInt8)epoch
++    ratchetCounter:(UInt8)ratchetCounter {
 +  [ThreemaGroupCallFrameCryptoContext validateMediaKey:pcmk];
 +
 +  auto ensuredContext = [self ensureContext];
@@ -2945,20 +2987,24 @@ index 0000000000..0c085b8bf0
 +      (const uint8_t *)pcmk.bytes, (uint8_t)epoch, (uint8_t)ratchetCounter);
 +}
 +
-+- (void)attach:(RTCRtpSender *)sender mediaType:(RTCRtpMediaType)mediaType tag:(NSString *)tag {
++- (void)attach:(RTCRtpSender *)sender
++     mediaType:(RTCRtpMediaType)mediaType
++           tag:(NSString *)tag {
 +  auto ensuredContext = [self ensureContext];
 +  auto transformer = ensuredContext->GetEncryptor().CreateEncryptor(
-+      std::string([tag UTF8String]), [ThreemaGroupCallFrameCryptoContext getCodec:mediaType]);
++      std::string([tag UTF8String]),
++      [ThreemaGroupCallFrameCryptoContext getCodec:mediaType]);
 +
 +  auto nativeRtpSender = [sender nativeRtpSender];
-+  nativeRtpSender->SetEncoderToPacketizerFrameTransformer(std::move(transformer));
++  nativeRtpSender->SetEncoderToPacketizerFrameTransformer(
++      std::move(transformer));
 +}
 +
 +- (void)remove {
 +  self->context = nil;
 +}
 +
-+- (rtc::scoped_refptr<threema::GroupCallFrameCryptoContext>)ensureContext {
++- (webrtc::scoped_refptr<threema::GroupCallFrameCryptoContext>)ensureContext {
 +  if (self->context) {
 +    return self->context;
 +  }

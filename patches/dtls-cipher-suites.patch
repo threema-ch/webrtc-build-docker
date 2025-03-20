@@ -1,8 +1,8 @@
 diff --git a/rtc_base/openssl_stream_adapter.cc b/rtc_base/openssl_stream_adapter.cc
-index 9642674d45..ce00b8c1e0 100644
+index e1e367b1ba..58bcf9c150 100644
 --- a/rtc_base/openssl_stream_adapter.cc
 +++ b/rtc_base/openssl_stream_adapter.cc
-@@ -1057,9 +1057,10 @@ SSL_CTX* OpenSSLStreamAdapter::SetupSSLContext() {
+@@ -1064,9 +1064,10 @@ SSL_CTX* OpenSSLStreamAdapter::SetupSSLContext() {
    // remove HMAC-SHA256 and HMAC-SHA384 cipher suites, not GCM cipher suites
    // with SHA256 or SHA384 as the handshake hash.
    // This matches the list of SSLClientSocketImpl in Chromium.

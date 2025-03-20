@@ -1,10 +1,10 @@
 diff --git a/media/engine/webrtc_voice_engine.cc b/media/engine/webrtc_voice_engine.cc
-index 23a1b1927c..d8400652d2 100644
+index a7568696db..670db725ff 100644
 --- a/media/engine/webrtc_voice_engine.cc
 +++ b/media/engine/webrtc_voice_engine.cc
-@@ -712,13 +712,6 @@ std::vector<AudioCodec> WebRtcVoiceEngine::CollectCodecs(
-   PayloadTypeMapper mapper;
-   std::vector<AudioCodec> out;
+@@ -368,13 +368,6 @@ std::vector<Codec> LegacyCollectCodecs(
+   webrtc::PayloadTypePicker pt_mapper;
+   std::vector<Codec> out;
  
 -  // Only generate CN payload types for these clockrates:
 -  std::map<int, bool, std::greater<int>> generate_cn = {
@@ -13,53 +13,61 @@ index 23a1b1927c..d8400652d2 100644
 -  std::map<int, bool, std::greater<int>> generate_dtmf = {
 -      {8000, false}, {16000, false}, {32000, false}, {48000, false}};
 -
-   auto map_format = [&mapper](const webrtc::SdpAudioFormat& format,
-                               std::vector<AudioCodec>* out) {
-     absl::optional<AudioCodec> opt_codec = mapper.ToAudioCodec(format);
-@@ -744,21 +737,6 @@ std::vector<AudioCodec> WebRtcVoiceEngine::CollectCodecs(
-             FeedbackParam(kRtcpFbParamTransportCc, kParamValueEmpty));
-       }
+   for (const auto& spec : specs) {
+     cricket::Codec codec = CreateAudioCodec(spec.format);
+     if (allocate_pt) {
+@@ -390,21 +383,6 @@ std::vector<Codec> LegacyCollectCodecs(
+           FeedbackParam(kRtcpFbParamTransportCc, kParamValueEmpty));
+     }
  
--      if (spec.info.allow_comfort_noise) {
--        // Generate a CN entry if the decoder allows it and we support the
--        // clockrate.
--        auto cn = generate_cn.find(spec.format.clockrate_hz);
--        if (cn != generate_cn.end()) {
--          cn->second = true;
--        }
+-    if (spec.info.allow_comfort_noise) {
+-      // Generate a CN entry if the decoder allows it and we support the
+-      // clockrate.
+-      auto cn = generate_cn.find(spec.format.clockrate_hz);
+-      if (cn != generate_cn.end()) {
+-        cn->second = true;
 -      }
+-    }
 -
--      // Generate a telephone-event entry if we support the clockrate.
--      auto dtmf = generate_dtmf.find(spec.format.clockrate_hz);
--      if (dtmf != generate_dtmf.end()) {
--        dtmf->second = true;
--      }
+-    // Generate a telephone-event entry if we support the clockrate.
+-    auto dtmf = generate_dtmf.find(spec.format.clockrate_hz);
+-    if (dtmf != generate_dtmf.end()) {
+-      dtmf->second = true;
+-    }
 -
-       out.push_back(codec);
+     out.push_back(codec);
  
-       if (codec.name == kOpusCodecName) {
-@@ -769,20 +747,6 @@ std::vector<AudioCodec> WebRtcVoiceEngine::CollectCodecs(
+     // TODO(hta):  Don't assign RED codecs until we know that the PT for Opus
+@@ -426,28 +404,6 @@ std::vector<Codec> LegacyCollectCodecs(
      }
    }
  
 -  // Add CN codecs after "proper" audio codecs.
 -  for (const auto& cn : generate_cn) {
 -    if (cn.second) {
--      map_format({kCnCodecName, cn.first, 1}, &out);
+-      cricket::Codec cn_codec = CreateAudioCodec({kCnCodecName, cn.first, 1});
+-      if (allocate_pt) {
+-        cn_codec.id = pt_mapper.SuggestMapping(cn_codec, nullptr).value();
+-      }
+-      out.push_back(cn_codec);
 -    }
 -  }
 -
 -  // Add telephone-event codecs last.
 -  for (const auto& dtmf : generate_dtmf) {
 -    if (dtmf.second) {
--      map_format({kDtmfCodecName, dtmf.first, 1}, &out);
+-      cricket::Codec dtmf_codec =
+-          CreateAudioCodec({kDtmfCodecName, dtmf.first, 1});
+-      if (allocate_pt) {
+-        dtmf_codec.id = pt_mapper.SuggestMapping(dtmf_codec, nullptr).value();
+-      }
+-      out.push_back(dtmf_codec);
 -    }
 -  }
--
    return out;
  }
  
-@@ -1354,20 +1318,6 @@ bool WebRtcVoiceSendChannel::SetSendCodecs(
+@@ -1418,20 +1374,6 @@ bool WebRtcVoiceSendChannel::SetSendCodecs(
      }
    }
  
@@ -78,9 +86,9 @@ index 23a1b1927c..d8400652d2 100644
 -  }
 -
    // Scan through the list to figure out the codec to use for sending.
-   absl::optional<webrtc::AudioSendStream::Config::SendCodecSpec>
-       send_codec_spec;
-@@ -1408,36 +1358,6 @@ bool WebRtcVoiceSendChannel::SetSendCodecs(
+   std::optional<webrtc::AudioSendStream::Config::SendCodecSpec> send_codec_spec;
+   webrtc::BitrateConstraints bitrate_config;
+@@ -1471,36 +1413,6 @@ bool WebRtcVoiceSendChannel::SetSendCodecs(
    }
  
    RTC_DCHECK(voice_codec_info);
@@ -118,7 +126,7 @@ index 23a1b1927c..d8400652d2 100644
    // Loop through the codecs to find the RED codec that matches opus
    // with respect to clockrate and number of channels.
 diff --git a/sdk/android/api/org/webrtc/RtpSender.java b/sdk/android/api/org/webrtc/RtpSender.java
-index 2d0bc6c1e1..377ec15970 100644
+index de0781e2e7..adeefbe20c 100644
 --- a/sdk/android/api/org/webrtc/RtpSender.java
 +++ b/sdk/android/api/org/webrtc/RtpSender.java
 @@ -28,12 +28,7 @@ public class RtpSender {
@@ -136,21 +144,21 @@ index 2d0bc6c1e1..377ec15970 100644
  
    /**
 diff --git a/sdk/objc/api/peerconnection/RTCRtpSender.mm b/sdk/objc/api/peerconnection/RTCRtpSender.mm
-index 4fadb30f49..08fc201845 100644
+index 08ab9ed404..acece122f6 100644
 --- a/sdk/objc/api/peerconnection/RTCRtpSender.mm
 +++ b/sdk/objc/api/peerconnection/RTCRtpSender.mm
-@@ -116,14 +116,6 @@
-   if (self = [super init]) {
+@@ -128,14 +128,6 @@
+   if (self) {
      _factory = factory;
      _nativeRtpSender = nativeRtpSender;
 -    if (_nativeRtpSender->media_type() == cricket::MEDIA_TYPE_AUDIO) {
 -      rtc::scoped_refptr<webrtc::DtmfSenderInterface> nativeDtmfSender(
 -          _nativeRtpSender->GetDtmfSender());
 -      if (nativeDtmfSender) {
--        _dtmfSender =
--            [[RTC_OBJC_TYPE(RTCDtmfSender) alloc] initWithNativeDtmfSender:nativeDtmfSender];
+-        _dtmfSender = [[RTC_OBJC_TYPE(RTCDtmfSender) alloc]
+-            initWithNativeDtmfSender:nativeDtmfSender];
 -      }
 -    }
-     RTCLogInfo(@"RTC_OBJC_TYPE(RTCRtpSender)(%p): created sender: %@", self, self.description);
-   }
-   return self;
+     RTCLogInfo(@"RTC_OBJC_TYPE(RTCRtpSender)(%p): created sender: %@",
+                self,
+                self.description);
