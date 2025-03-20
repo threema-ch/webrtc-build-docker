@@ -1,16 +1,16 @@
 diff --git a/p2p/base/p2p_transport_channel.cc b/p2p/base/p2p_transport_channel.cc
-index eb3553b52a..0d8dd4fa73 100644
+index 8c7d91aeac..9b0a6f455a 100644
 --- a/p2p/base/p2p_transport_channel.cc
 +++ b/p2p/base/p2p_transport_channel.cc
-@@ -16,6 +16,7 @@
- #include <algorithm>
+@@ -19,6 +19,7 @@
  #include <functional>
  #include <memory>
+ #include <optional>
 +#include <regex>
  #include <set>
- #include <utility>
- 
-@@ -1201,13 +1202,23 @@ void P2PTransportChannel::ResolveHostnameCandidate(const Candidate& candidate) {
+ #include <string>
+ #include <tuple>
+@@ -1243,13 +1244,23 @@ void P2PTransportChannel::ResolveHostnameCandidate(const Candidate& candidate) {
      return;
    }
  
@@ -36,18 +36,18 @@ index eb3553b52a..0d8dd4fa73 100644
  
  void P2PTransportChannel::AddRemoteCandidate(const Candidate& candidate) {
 diff --git a/p2p/base/p2p_transport_channel.h b/p2p/base/p2p_transport_channel.h
-index f7472df38a..47ab46243b 100644
+index 0e39a82b59..43a267318b 100644
 --- a/p2p/base/p2p_transport_channel.h
 +++ b/p2p/base/p2p_transport_channel.h
-@@ -26,6 +26,7 @@
- #include <algorithm>
+@@ -27,6 +27,7 @@
  #include <map>
  #include <memory>
+ #include <optional>
 +#include <regex>
- #include <set>
  #include <string>
- #include <utility>
-@@ -482,6 +483,15 @@ class RTC_EXPORT P2PTransportChannel : public IceTransportInternal,
+ #include <vector>
+ 
+@@ -491,6 +492,15 @@ class RTC_EXPORT P2PTransportChannel : public IceTransportInternal,
      std::unique_ptr<webrtc::AsyncDnsResolverInterface> resolver_;
    };
    std::vector<CandidateAndResolver> resolvers_ RTC_GUARDED_BY(network_thread_);

@@ -1,8 +1,8 @@
 diff --git a/modules/rtp_rtcp/source/rtp_sender_video.cc b/modules/rtp_rtcp/source/rtp_sender_video.cc
-index ebca7aaa75..9376f1aec6 100644
+index 9ba860836a..e9bb90bd98 100644
 --- a/modules/rtp_rtcp/source/rtp_sender_video.cc
 +++ b/modules/rtp_rtcp/source/rtp_sender_video.cc
-@@ -331,10 +331,7 @@ void RTPSenderVideo::AddRtpHeaderExtensions(const RTPVideoHeader& video_header,
+@@ -365,10 +365,7 @@ void RTPSenderVideo::AddRtpHeaderExtensions(const RTPVideoHeader& video_header,
    // value sent.
    // Set rotation when key frame or when changed (to follow standard).
    // Or when different from 0 (to follow current receiver implementation).

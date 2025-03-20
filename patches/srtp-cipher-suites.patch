@@ -1,8 +1,8 @@
 diff --git a/api/crypto/crypto_options.cc b/api/crypto/crypto_options.cc
-index 22c5dd464b..d6840f9bbb 100644
+index 37df0d561e..c66ae00112 100644
 --- a/api/crypto/crypto_options.cc
 +++ b/api/crypto/crypto_options.cc
-@@ -32,25 +32,21 @@ CryptoOptions CryptoOptions::NoGcm() {
+@@ -35,25 +35,21 @@ CryptoOptions CryptoOptions::NoGcm() {
  
  std::vector<int> CryptoOptions::GetSupportedDtlsSrtpCryptoSuites() const {
    std::vector<int> crypto_suites;
@@ -39,10 +39,10 @@ index 22c5dd464b..d6840f9bbb 100644
    return crypto_suites;
  }
 diff --git a/rtc_base/openssl_stream_adapter.cc b/rtc_base/openssl_stream_adapter.cc
-index 9642674d45..493b89e6c2 100644
+index e1e367b1ba..d4f12f09f8 100644
 --- a/rtc_base/openssl_stream_adapter.cc
 +++ b/rtc_base/openssl_stream_adapter.cc
-@@ -77,10 +77,9 @@ struct SslCipherMapEntry {
+@@ -89,10 +89,9 @@ struct SslCipherMapEntry {
  
  // This isn't elegant, but it's better than an external reference
  constexpr SrtpCipherMapEntry kSrtpCipherMap[] = {
@@ -53,5 +53,5 @@ index 9642674d45..493b89e6c2 100644
 -    {"SRTP_AEAD_AES_256_GCM", kSrtpAeadAes256Gcm}};
 +    {"SRTP_AES128_CM_SHA1_80", kSrtpAes128CmSha1_80}};
  
- #ifndef OPENSSL_IS_BORINGSSL
- // The "SSL_CIPHER_standard_name" function is only available in OpenSSL when
+ #ifdef OPENSSL_IS_BORINGSSL
+ // Enabled by EnableTimeCallbackForTesting. Should never be set in production
