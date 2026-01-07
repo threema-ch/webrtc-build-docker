@@ -48,7 +48,8 @@ USER $USERNAME
 
 # Run fetch and gclient initially since this pulls a lot of data when run
 # for the first time
-RUN fetch --help > /dev/null \
+RUN update_depot_tools \
+ && fetch --help > /dev/null \
  && gclient --help > /dev/null
 
 # Set working directory
