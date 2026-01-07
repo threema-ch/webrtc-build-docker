@@ -13,6 +13,7 @@ function print_usage {
     echo "  update"
     echo "  sync"
     echo "  patch"
+    echo "  format"
     echo "  build <${TARGETS}>"
     echo "  build-all"
     echo "  run"
@@ -165,6 +166,22 @@ case ${1-} in
         # Log patches
         mkdir -p out/
         ls -noa --time-style=long-iso patches/${pattern} > out/patches.txt
+        ;;
+
+    format)
+        require_tools_image
+        if [[ ! -d "webrtc" ]]; then
+            echo "Cannot format, source directory 'webrtc' does not exist"
+            echo "Did you forget to run an initial '$0 fetch'?"
+            exit 4;
+        fi
+
+        # Format
+        docker run -it -v ${PWD}/webrtc:/webrtc threema/webrtc-build-tools:latest bash -c "
+            set -euo pipefail
+            cd src
+            git cl format
+        "
         ;;
 
     build)
