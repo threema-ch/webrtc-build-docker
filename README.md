@@ -113,11 +113,81 @@ isn't included in the binary's debug info) and will ensure that you don't
 forget to apply patches (because it always applies all patches at
 `patches/*.patch`).
 
-
 ## Patches
 
 Patches should be created using `git diff` inside the webrtc/src directory and
 stored in the /patches directory to be applied automatically when running
 `./cli.sh patch`.
 
-    $ git diff > ../../patches/my-changes.patch
+    git diff > ../../patches/my-changes.patch
+
+## Updating the libwebrtc revision
+
+When updating to another libwebrtc revision, select the most recent stable
+release on https://chromiumdash.appspot.com/branches and pick the most recent
+libwebrtc revision.
+
+Check for any new PSA threads and other threads indicating gotchas on
+https://groups.google.com/g/discuss-webrtc since the last update.
+
+Update `build-tools/Dockerfile` if needed.
+
+Run the following commands:
+
+    rm -r ./out
+    ./cli.sh update
+    cd ./webrtc/src/
+    git checkout <revision>
+    cd ../../
+    ./cli.sh sync
+    WEBRTC_TARGETS="x64" ./cli.sh build-all
+    cd ./webrtc/src/
+    git switch -c threema-<revision>
+
+Now, apply the patches **individually**, fix any conflicts/errors, update the
+patch file, ensure it builds and then revert to a clean state before continuing
+with the next patch:
+
+    git apply ../../patches/<patch>
+    (cd ../../ && ./cli.sh format && WEBRTC_TARGETS="x64" ./cli.sh build-all)
+    git diff > ../../patches/<patch>
+    git checkout . && git clean -d -f
+
+When updating a patch, briefly take a look at the environment: Were there
+significant changes on the feature that may defeat the purpose of the patch or
+leave it in a broken state? Double check the diff of the patches, so that no
+accidental mistakes are introduced. Go through it thoroughly!
+
+Make sure that you have the
+[webrtc-android](https://github.com/threema-ch/webrtc-android) repository in the
+parent directory. Make the following modifications to it:
+
+    cd ../webrtc-android
+    git rm -rf libs && mkdir libs && ln -s ../../webrtc-build-docker/out/libwebrtc.jar libs/libwebrtc.jar && mkdir libs/arm64-v8a && ln -s ../../../webrtc-build-docker/out/arm64/libjingle_peerconnection_so.so libs/arm64-v8a/libjingle_peerconnection_so.so && mkdir libs/armeabi-v7a && ln -s ../../../webrtc-build-docker/out/arm/libjingle_peerconnection_so.so libs/armeabi-v7a/libjingle_peerconnection_so.so && mkdir libs/x86 && ln -s ../../../webrtc-build-docker/out/x86/libjingle_peerconnection_so.so libs/x86/libjingle_peerconnection_so.so && mkdir libs/x86_64 && ln -s ../../../webrtc-build-docker/out/x64/libjingle_peerconnection_so.so libs/x86_64/libjingle_peerconnection_so.so
+
+Open `build.gradle` and change `webrtcVersion` and `libraryVersion` to something
+absurdly high, e.g. `1337.0.0`. Comment the `signing` section.
+
+Now, apply all patches at once and make a test build for Android (assuming an
+ARM device here):
+
+    cd ../../
+    ./cli.sh patch
+    WEBRTC_TARGETS="arm arm64" ./cli.sh build-all
+    (cd ../webrtc-android && ./gradlew publishToMavenLocal)
+
+Apply the resulting library to the Android codebase in the following hacky way:
+
+- Open `build.gradle.kts` and add `mavenLocal()` to `allprojects.repositories`.
+- Open `gradle/libs.versions.toml` and change the `webrtcAndroid` version to
+  your chosen (absurdly high) version.
+
+Now, build the Android codebase and test the following things:
+
+- Make a web client smoke test.
+- Make a 1:1 call smoke test with camera rotation.
+- Make a group call smoke test with camera rotation.
+- Run the SDP test suite in Android Studio.
+
+If all looks good, clean up the mess you made in webrtc-android and the Android
+codebase and prepare a release with `./build-final.sh <revision>`.
