@@ -1,22 +1,21 @@
 diff --git a/media/engine/webrtc_voice_engine.cc b/media/engine/webrtc_voice_engine.cc
-index a7568696db..670db725ff 100644
+index 1998317924..667b9c8ddb 100644
 --- a/media/engine/webrtc_voice_engine.cc
 +++ b/media/engine/webrtc_voice_engine.cc
-@@ -368,13 +368,6 @@ std::vector<Codec> LegacyCollectCodecs(
-   webrtc::PayloadTypePicker pt_mapper;
+@@ -370,12 +370,6 @@ std::vector<Codec> LegacyCollectCodecs(const std::vector<AudioCodecSpec>& specs,
+   PayloadTypePicker pt_mapper;
    std::vector<Codec> out;
  
 -  // Only generate CN payload types for these clockrates:
--  std::map<int, bool, std::greater<int>> generate_cn = {
--      {8000, false}, {16000, false}, {32000, false}};
+-  std::map<int, bool, std::greater<int>> generate_cn = {{8000, false}};
 -  // Only generate telephone-event payload types for these clockrates:
--  std::map<int, bool, std::greater<int>> generate_dtmf = {
--      {8000, false}, {16000, false}, {32000, false}, {48000, false}};
+-  std::map<int, bool, std::greater<int>> generate_dtmf = {{8000, false},
+-                                                          {48000, false}};
 -
    for (const auto& spec : specs) {
-     cricket::Codec codec = CreateAudioCodec(spec.format);
+     Codec codec = CreateAudioCodec(spec.format);
      if (allocate_pt) {
-@@ -390,21 +383,6 @@ std::vector<Codec> LegacyCollectCodecs(
+@@ -391,21 +385,6 @@ std::vector<Codec> LegacyCollectCodecs(const std::vector<AudioCodecSpec>& specs,
            FeedbackParam(kRtcpFbParamTransportCc, kParamValueEmpty));
      }
  
@@ -38,14 +37,14 @@ index a7568696db..670db725ff 100644
      out.push_back(codec);
  
      // TODO(hta):  Don't assign RED codecs until we know that the PT for Opus
-@@ -426,28 +404,6 @@ std::vector<Codec> LegacyCollectCodecs(
+@@ -427,27 +406,6 @@ std::vector<Codec> LegacyCollectCodecs(const std::vector<AudioCodecSpec>& specs,
      }
    }
  
 -  // Add CN codecs after "proper" audio codecs.
 -  for (const auto& cn : generate_cn) {
 -    if (cn.second) {
--      cricket::Codec cn_codec = CreateAudioCodec({kCnCodecName, cn.first, 1});
+-      Codec cn_codec = CreateAudioCodec({kCnCodecName, cn.first, 1});
 -      if (allocate_pt) {
 -        cn_codec.id = pt_mapper.SuggestMapping(cn_codec, nullptr).value();
 -      }
@@ -56,8 +55,7 @@ index a7568696db..670db725ff 100644
 -  // Add telephone-event codecs last.
 -  for (const auto& dtmf : generate_dtmf) {
 -    if (dtmf.second) {
--      cricket::Codec dtmf_codec =
--          CreateAudioCodec({kDtmfCodecName, dtmf.first, 1});
+-      Codec dtmf_codec = CreateAudioCodec({kDtmfCodecName, dtmf.first, 1});
 -      if (allocate_pt) {
 -        dtmf_codec.id = pt_mapper.SuggestMapping(dtmf_codec, nullptr).value();
 -      }
@@ -67,7 +65,7 @@ index a7568696db..670db725ff 100644
    return out;
  }
  
-@@ -1418,20 +1374,6 @@ bool WebRtcVoiceSendChannel::SetSendCodecs(
+@@ -1453,20 +1411,6 @@ bool WebRtcVoiceSendChannel::SetSendCodecs(
      }
    }
  
@@ -86,9 +84,9 @@ index a7568696db..670db725ff 100644
 -  }
 -
    // Scan through the list to figure out the codec to use for sending.
-   std::optional<webrtc::AudioSendStream::Config::SendCodecSpec> send_codec_spec;
-   webrtc::BitrateConstraints bitrate_config;
-@@ -1471,36 +1413,6 @@ bool WebRtcVoiceSendChannel::SetSendCodecs(
+   std::optional<AudioSendStream::Config::SendCodecSpec> send_codec_spec;
+   BitrateConstraints bitrate_config;
+@@ -1506,35 +1450,6 @@ bool WebRtcVoiceSendChannel::SetSendCodecs(
    }
  
    RTC_DCHECK(voice_codec_info);
@@ -102,8 +100,7 @@ index a7568696db..670db725ff 100644
 -        if (cn_codec.channels != 1) {
 -          RTC_LOG(LS_WARNING)
 -              << "CN #channels " << cn_codec.channels << " not supported.";
--        } else if (cn_codec.clockrate != 8000 && cn_codec.clockrate != 16000 &&
--                   cn_codec.clockrate != 32000) {
+-        } else if (cn_codec.clockrate != 8000) {
 -          RTC_LOG(LS_WARNING)
 -              << "CN frequency " << cn_codec.clockrate << " not supported.";
 -        } else {
@@ -144,15 +141,15 @@ index de0781e2e7..adeefbe20c 100644
  
    /**
 diff --git a/sdk/objc/api/peerconnection/RTCRtpSender.mm b/sdk/objc/api/peerconnection/RTCRtpSender.mm
-index 08ab9ed404..acece122f6 100644
+index f3135c6e5c..9c4ba7f4d0 100644
 --- a/sdk/objc/api/peerconnection/RTCRtpSender.mm
 +++ b/sdk/objc/api/peerconnection/RTCRtpSender.mm
 @@ -128,14 +128,6 @@
    if (self) {
      _factory = factory;
      _nativeRtpSender = nativeRtpSender;
--    if (_nativeRtpSender->media_type() == cricket::MEDIA_TYPE_AUDIO) {
--      rtc::scoped_refptr<webrtc::DtmfSenderInterface> nativeDtmfSender(
+-    if (_nativeRtpSender->media_type() == webrtc::MediaType::AUDIO) {
+-      webrtc::scoped_refptr<webrtc::DtmfSenderInterface> nativeDtmfSender(
 -          _nativeRtpSender->GetDtmfSender());
 -      if (nativeDtmfSender) {
 -        _dtmfSender = [[RTC_OBJC_TYPE(RTCDtmfSender) alloc]

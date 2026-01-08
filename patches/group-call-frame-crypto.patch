@@ -1,12 +1,12 @@
 diff --git a/pc/BUILD.gn b/pc/BUILD.gn
-index d46ff16d72..786e601fdc 100644
+index f6a1f3767a..bbff9be0b3 100644
 --- a/pc/BUILD.gn
 +++ b/pc/BUILD.gn
-@@ -1239,6 +1239,26 @@ rtc_source_set("peer_connection") {
+@@ -1385,6 +1385,26 @@ rtc_library("peer_connection") {
    ]
  }
  
-+rtc_source_set("threema_group_call_frame_transformer") {
++rtc_library("threema_group_call_frame_transformer") {
 +  visibility = [ "*" ]
 +  sources = [
 +    "threema_group_call_frame_transformer.cc",
@@ -26,15 +26,15 @@ index d46ff16d72..786e601fdc 100644
 +  ]
 +}
 +
- rtc_source_set("simulcast_sdp_serializer") {
-   visibility = [ ":*" ]
-   sources = [
+ rtc_library("simulcast_sdp_serializer") {
+   visibility = [
+     ":*",
 diff --git a/pc/threema_group_call_frame_transformer.cc b/pc/threema_group_call_frame_transformer.cc
 new file mode 100644
-index 0000000000..923b8f5933
+index 0000000000..84f8d3849a
 --- /dev/null
 +++ b/pc/threema_group_call_frame_transformer.cc
-@@ -0,0 +1,820 @@
+@@ -0,0 +1,828 @@
 +/*
 + * Copyright 2022 Threema GmbH. All Rights Reserved.
 + *
@@ -332,8 +332,8 @@ index 0000000000..923b8f5933
 +    std::unique_ptr<webrtc::TransformableFrameInterface> frame) {
 +  // Lookup frame dispatcher by SSRC
 +  uint32_t const ssrc = frame->GetSsrc();
-+  auto const* const frame_dispatcher = GetFrameDispatcher(ssrc);
-+  if (frame_dispatcher == nullptr) {
++  auto const* const frame_dispatcher_ = GetFrameDispatcher(ssrc);
++  if (frame_dispatcher_ == nullptr) {
 +    RTC_LOG(LS_ERROR) << tag << " No frame dispatcher registered for SSRC "
 +                      << ssrc;
 +    return;
@@ -348,7 +348,7 @@ index 0000000000..923b8f5933
 +    if (codec == Codec::kOpus) {
 +      // Opus DTX generates empty frames for discontinued transmission (i.e.
 +      // silence)
-+      frame_dispatcher->get()->OnTransformedFrame(std::move(frame));
++      frame_dispatcher_->get()->OnTransformedFrame(std::move(frame));
 +    } else {
 +      RTC_LOG(LS_ERROR) << tag << " Discarding unencrypted frame of 0 bytes";
 +    }
@@ -457,22 +457,25 @@ index 0000000000..923b8f5933
 +                       << le32toh(snapshot->mfsn_le)
 +                       << ", length=" << unencrypted.size() << " -> "
 +                       << encoded.size() << ", ssrc=" << ssrc << ")";
-+  frame->SetData(rtc::ArrayView<const uint8_t>(encoded.data(), encoded.size()));
-+  frame_dispatcher->get()->OnTransformedFrame(std::move(frame));
++  frame->SetData(
++      webrtc::ArrayView<const uint8_t>(encoded.data(), encoded.size()));
++  frame_dispatcher_->get()->OnTransformedFrame(std::move(frame));
 +}
 +
 +void GroupCallFrameEncryptor::RegisterTransformedFrameCallback(
-+    webrtc::scoped_refptr<webrtc::TransformedFrameCallback> const dispatcher) {
++    webrtc::scoped_refptr<webrtc::TransformedFrameCallback> const
++        frame_dispatcher_) {
 +  RTC_DCHECK(frame_dispatchers.size() == 0);
 +
 +  // Add non-SSRC based dispatcher (deprecated)
 +  RTC_LOG(LS_VERBOSE)
 +      << tag << " Registering legacy frame dispatcher for unknown SSRC";
-+  frame_dispatcher = std::move(dispatcher);
++  frame_dispatcher = std::move(frame_dispatcher_);
 +}
 +
 +void GroupCallFrameEncryptor::RegisterTransformedFrameSinkCallback(
-+    webrtc::scoped_refptr<webrtc::TransformedFrameCallback> const dispatcher,
++    webrtc::scoped_refptr<webrtc::TransformedFrameCallback> const
++        frame_dispatcher_,
 +    uint32_t const ssrc) {
 +  RTC_DCHECK(frame_dispatcher == nullptr);
 +
@@ -482,7 +485,7 @@ index 0000000000..923b8f5933
 +      RTC_LOG(LS_WARNING) << tag
 +                          << " Replacing existing frame dispatcher for SSRC "
 +                          << ssrc;
-+      existing_frame_dispatcher.second = std::move(dispatcher);
++      existing_frame_dispatcher.second = std::move(frame_dispatcher_);
 +      return;
 +    }
 +  }
@@ -490,7 +493,8 @@ index 0000000000..923b8f5933
 +  // No existing dispatcher found for this SSRC, add a new one
 +  RTC_LOG(LS_VERBOSE) << tag << " Registering frame dispatcher for SSRC "
 +                      << ssrc;
-+  frame_dispatchers.push_back(std::make_pair(ssrc, std::move(dispatcher)));
++  frame_dispatchers.push_back(
++      std::make_pair(ssrc, std::move(frame_dispatcher_)));
 +}
 +
 +void GroupCallFrameEncryptor::UnregisterTransformedFrameCallback() {
@@ -503,8 +507,8 @@ index 0000000000..923b8f5933
 +    uint32_t const ssrc) {
 +  frame_dispatchers.erase(
 +      std::remove_if(frame_dispatchers.begin(), frame_dispatchers.end(),
-+                     [=, this](auto& frame_dispatcher) {
-+                       if (frame_dispatcher.first == ssrc) {
++                     [=, this](auto& frame_dispatcher_) {
++                       if (frame_dispatcher_.first == ssrc) {
 +                         RTC_LOG(LS_VERBOSE)
 +                             << tag
 +                             << " Unregistering frame dispatcher for SSRC "
@@ -525,9 +529,9 @@ index 0000000000..923b8f5933
 +  }
 +
 +  // Lookup frame dispatcher
-+  for (auto& frame_dispatcher : frame_dispatchers) {
-+    if (frame_dispatcher.first == ssrc) {
-+      return &frame_dispatcher.second;
++  for (auto& frame_dispatcher_ : frame_dispatchers) {
++    if (frame_dispatcher_.first == ssrc) {
++      return &frame_dispatcher_.second;
 +    }
 +  }
 +
@@ -562,8 +566,8 @@ index 0000000000..923b8f5933
 +    std::unique_ptr<webrtc::TransformableFrameInterface> frame) {
 +  // Lookup frame dispatcher by SSRC
 +  uint32_t const ssrc = frame->GetSsrc();
-+  auto const* const frame_dispatcher = GetFrameDispatcher(ssrc);
-+  if (frame_dispatcher == nullptr) {
++  auto const* const frame_dispatcher_ = GetFrameDispatcher(ssrc);
++  if (frame_dispatcher_ == nullptr) {
 +    RTC_LOG(LS_ERROR) << tag << " No frame dispatcher registered for SSRC "
 +                      << ssrc;
 +    return;
@@ -577,7 +581,7 @@ index 0000000000..923b8f5933
 +    if (codec == Codec::kOpus) {
 +      // Opus DTX generates empty frames for discontinued transmission (i.e.
 +      // silence)
-+      frame_dispatcher->get()->OnTransformedFrame(std::move(frame));
++      frame_dispatcher_->get()->OnTransformedFrame(std::move(frame));
 +    } else {
 +      RTC_LOG(LS_ERROR) << tag << " Discarding encrypted frame of 0 bytes";
 +    }
@@ -690,22 +694,25 @@ index 0000000000..923b8f5933
 +                       << " Decrypted frame (mfsn=" << le32toh(snapshot.mfsn_le)
 +                       << ", length=" << encrypted.size() << " -> "
 +                       << decoded.size() << ", ssrc=" << ssrc << ")";
-+  frame->SetData(rtc::ArrayView<const uint8_t>(decoded.data(), decoded.size()));
-+  frame_dispatcher->get()->OnTransformedFrame(std::move(frame));
++  frame->SetData(
++      webrtc::ArrayView<const uint8_t>(decoded.data(), decoded.size()));
++  frame_dispatcher_->get()->OnTransformedFrame(std::move(frame));
 +}
 +
 +void GroupCallFrameDecryptor::RegisterTransformedFrameCallback(
-+    webrtc::scoped_refptr<webrtc::TransformedFrameCallback> const dispatcher) {
++    webrtc::scoped_refptr<webrtc::TransformedFrameCallback> const
++        frame_dispatcher_) {
 +  RTC_DCHECK(frame_dispatchers.size() == 0);
 +
 +  // Add non-SSRC based dispatcher (deprecated)
 +  RTC_LOG(LS_VERBOSE)
 +      << tag << " Registering legacy frame dispatcher for unknown SSRC";
-+  frame_dispatcher = std::move(dispatcher);
++  frame_dispatcher = std::move(frame_dispatcher_);
 +}
 +
 +void GroupCallFrameDecryptor::RegisterTransformedFrameSinkCallback(
-+    webrtc::scoped_refptr<webrtc::TransformedFrameCallback> const dispatcher,
++    webrtc::scoped_refptr<webrtc::TransformedFrameCallback> const
++        frame_dispatcher_,
 +    uint32_t const ssrc) {
 +  RTC_DCHECK(frame_dispatcher == nullptr);
 +
@@ -715,7 +722,7 @@ index 0000000000..923b8f5933
 +      RTC_LOG(LS_WARNING) << tag
 +                          << " Replacing existing frame dispatcher for SSRC "
 +                          << ssrc;
-+      existing_frame_dispatcher.second = std::move(dispatcher);
++      existing_frame_dispatcher.second = std::move(frame_dispatcher_);
 +      return;
 +    }
 +  }
@@ -723,7 +730,8 @@ index 0000000000..923b8f5933
 +  // No existing dispatcher found for this SSRC, add a new one
 +  RTC_LOG(LS_VERBOSE) << tag << " Registering frame dispatcher for SSRC "
 +                      << ssrc;
-+  frame_dispatchers.push_back(std::make_pair(ssrc, std::move(dispatcher)));
++  frame_dispatchers.push_back(
++      std::make_pair(ssrc, std::move(frame_dispatcher_)));
 +}
 +
 +void GroupCallFrameDecryptor::UnregisterTransformedFrameCallback() {
@@ -736,8 +744,8 @@ index 0000000000..923b8f5933
 +    uint32_t const ssrc) {
 +  frame_dispatchers.erase(
 +      std::remove_if(frame_dispatchers.begin(), frame_dispatchers.end(),
-+                     [=, this](auto& frame_dispatcher) {
-+                       if (frame_dispatcher.first == ssrc) {
++                     [=, this](auto& frame_dispatcher_) {
++                       if (frame_dispatcher_.first == ssrc) {
 +                         RTC_LOG(LS_VERBOSE)
 +                             << tag
 +                             << " Unregistering frame dispatcher for SSRC "
@@ -758,9 +766,9 @@ index 0000000000..923b8f5933
 +  }
 +
 +  // Lookup frame dispatcher
-+  for (auto& frame_dispatcher : frame_dispatchers) {
-+    if (frame_dispatcher.first == ssrc) {
-+      return &frame_dispatcher.second;
++  for (auto& frame_dispatcher_ : frame_dispatchers) {
++    if (frame_dispatcher_.first == ssrc) {
++      return &frame_dispatcher_.second;
 +    }
 +  }
 +
@@ -857,10 +865,10 @@ index 0000000000..923b8f5933
 +}  // namespace threema
 diff --git a/pc/threema_group_call_frame_transformer.h b/pc/threema_group_call_frame_transformer.h
 new file mode 100644
-index 0000000000..69db90a08e
+index 0000000000..c825bc14f6
 --- /dev/null
 +++ b/pc/threema_group_call_frame_transformer.h
-@@ -0,0 +1,232 @@
+@@ -0,0 +1,234 @@
 +/*
 + * Copyright 2022 Threema GmbH. All Rights Reserved.
 + *
@@ -981,10 +989,11 @@ index 0000000000..69db90a08e
 +  void Transform(
 +      std::unique_ptr<webrtc::TransformableFrameInterface> frame) override;
 +  void RegisterTransformedFrameCallback(
-+      webrtc::scoped_refptr<webrtc::TransformedFrameCallback> const dispatcher)
-+      override;
++      webrtc::scoped_refptr<webrtc::TransformedFrameCallback> const
++          frame_dispatcher_) override;
 +  void RegisterTransformedFrameSinkCallback(
-+      webrtc::scoped_refptr<webrtc::TransformedFrameCallback> const dispatcher,
++      webrtc::scoped_refptr<webrtc::TransformedFrameCallback> const
++          frame_dispatcher_,
 +      uint32_t const ssrc) override;
 +  void UnregisterTransformedFrameCallback() override;
 +  void UnregisterTransformedFrameSinkCallback(uint32_t const ssrc) override;
@@ -1017,10 +1026,11 @@ index 0000000000..69db90a08e
 +  void Transform(
 +      std::unique_ptr<webrtc::TransformableFrameInterface> frame) override;
 +  void RegisterTransformedFrameCallback(
-+      webrtc::scoped_refptr<webrtc::TransformedFrameCallback> const dispatcher)
-+      override;
++      webrtc::scoped_refptr<webrtc::TransformedFrameCallback> const
++          frame_dispatcher_) override;
 +  void RegisterTransformedFrameSinkCallback(
-+      webrtc::scoped_refptr<webrtc::TransformedFrameCallback> const dispatcher,
++      webrtc::scoped_refptr<webrtc::TransformedFrameCallback> const
++          frame_dispatcher_,
 +      uint32_t const ssrc) override;
 +  void UnregisterTransformedFrameCallback() override;
 +  void UnregisterTransformedFrameSinkCallback(uint32_t const ssrc) override;
@@ -1977,10 +1987,10 @@ index 0000000000..cd38b1ba00
 +}
 +#endif
 diff --git a/sdk/BUILD.gn b/sdk/BUILD.gn
-index e76b68c92e..fbc7f16b90 100644
+index 839549ac95..ae13c84b9e 100644
 --- a/sdk/BUILD.gn
 +++ b/sdk/BUILD.gn
-@@ -1053,6 +1053,15 @@ if (is_ios || is_mac) {
+@@ -1087,6 +1087,15 @@ if (is_ios || is_mac) {
          "objc/api/peerconnection/RTCVideoTrack+Private.h",
          "objc/api/peerconnection/RTCVideoTrack.h",
          "objc/api/peerconnection/RTCVideoTrack.mm",
@@ -1996,15 +2006,15 @@ index e76b68c92e..fbc7f16b90 100644
        ]
  
        configs += [
-@@ -1079,6 +1088,7 @@ if (is_ios || is_mac) {
+@@ -1115,6 +1124,7 @@ if (is_ios || is_mac) {
          "../api:dtmf_sender_interface",
          "../api:enable_media",
          "../api:field_trials_view",
 +        "../api:frame_transformer_interface",
-         "../api:libjingle_peerconnection_api",
+         "../api:jsep",
+         "../api:legacy_stats_types",
          "../api:media_stream_interface",
-         "../api:rtc_event_log_output_file",
-@@ -1107,6 +1117,7 @@ if (is_ios || is_mac) {
+@@ -1150,6 +1160,7 @@ if (is_ios || is_mac) {
          "../media:rtc_media_base",
          "../modules/video_coding:video_codec_interface",
          "../pc:peer_connection_factory",
@@ -2012,7 +2022,7 @@ index e76b68c92e..fbc7f16b90 100644
          "../pc:webrtc_sdp",
          "../rtc_base:checks",
          "../rtc_base:event_tracer",
-@@ -1122,6 +1133,7 @@ if (is_ios || is_mac) {
+@@ -1165,6 +1176,7 @@ if (is_ios || is_mac) {
          "../stats:rtc_stats",
          "../system_wrappers:field_trial",
          "../system_wrappers:metrics",
@@ -2020,17 +2030,17 @@ index e76b68c92e..fbc7f16b90 100644
        ]
  
        if (is_ios) {
-@@ -1367,6 +1379,9 @@ if (is_ios || is_mac) {
+@@ -1413,6 +1425,9 @@ if (is_ios || is_mac) {
            "objc/api/peerconnection/RTCCryptoOptions.h",
            "objc/api/peerconnection/RTCVideoSource.h",
            "objc/api/peerconnection/RTCVideoTrack.h",
 +          "objc/api/peerconnection/ThreemaGroupCallFrameCryptoContext.h",
-+          "objc/api/peerconnection/ThreemaGroupCallFrameCryptoEncryptor.h",
 +          "objc/api/peerconnection/ThreemaGroupCallFrameCryptoDecryptor.h",
++          "objc/api/peerconnection/ThreemaGroupCallFrameCryptoEncryptor.h",
            "objc/api/video_codec/RTCVideoCodecConstants.h",
            "objc/api/video_codec/RTCVideoDecoderVP8.h",
            "objc/api/video_codec/RTCVideoDecoderVP9.h",
-@@ -1482,6 +1497,9 @@ if (is_ios || is_mac) {
+@@ -1528,6 +1543,9 @@ if (is_ios || is_mac) {
            "objc/api/peerconnection/RTCTracing.h",
            "objc/api/peerconnection/RTCVideoSource.h",
            "objc/api/peerconnection/RTCVideoTrack.h",
@@ -2041,10 +2051,10 @@ index e76b68c92e..fbc7f16b90 100644
            "objc/api/video_codec/RTCVideoDecoderVP8.h",
            "objc/api/video_codec/RTCVideoDecoderVP9.h",
 diff --git a/sdk/android/BUILD.gn b/sdk/android/BUILD.gn
-index 340f9fd5d9..28299e54d5 100644
+index b80bf00b5e..33c680b290 100644
 --- a/sdk/android/BUILD.gn
 +++ b/sdk/android/BUILD.gn
-@@ -314,6 +314,7 @@ if (is_android) {
+@@ -330,6 +330,7 @@ if (is_android) {
        "api/org/webrtc/SessionDescription.java",
        "api/org/webrtc/StatsObserver.java",
        "api/org/webrtc/StatsReport.java",
@@ -2052,7 +2062,7 @@ index 340f9fd5d9..28299e54d5 100644
        "api/org/webrtc/TurnCustomizer.java",
        "api/org/webrtc/VideoProcessor.java",
        "api/org/webrtc/VideoSource.java",
-@@ -778,6 +779,8 @@ if (current_os == "linux" || is_android) {
+@@ -813,6 +814,8 @@ if (current_os == "linux" || is_android) {
        "src/jni/pc/ssl_certificate_verifier_wrapper.h",
        "src/jni/pc/stats_observer.cc",
        "src/jni/pc/stats_observer.h",
@@ -2061,31 +2071,31 @@ index 340f9fd5d9..28299e54d5 100644
        "src/jni/pc/turn_customizer.cc",
        "src/jni/pc/turn_customizer.h",
      ]
-@@ -794,6 +797,7 @@ if (current_os == "linux" || is_android) {
-       "..:media_constraints",
+@@ -834,6 +837,7 @@ if (current_os == "linux" || is_android) {
        "../../api:dtmf_sender_interface",
        "../../api:enable_media",
+       "../../api:fec_controller_api",
 +      "../../api:frame_transformer_interface",
+       "../../api:jsep",
        "../../api:libjingle_peerconnection_api",
-       "../../api:media_stream_interface",
-       "../../api:rtc_event_log_output_file",
-@@ -814,6 +818,7 @@ if (current_os == "linux" || is_android) {
-       "../../modules/utility",
+       "../../api:make_ref_counted",
+@@ -873,6 +877,7 @@ if (current_os == "linux" || is_android) {
+       "../../p2p:port",
        "../../pc:media_stream_observer",
        "../../pc:peer_connection_factory",
 +      "../../pc:threema_group_call_frame_transformer",
        "../../pc:webrtc_sdp",
+       "../../rtc_base:buffer",
        "../../rtc_base:checks",
-       "../../rtc_base:event_tracer",
-@@ -828,6 +833,7 @@ if (current_os == "linux" || is_android) {
-       "../../stats:rtc_stats",
+@@ -893,6 +898,7 @@ if (current_os == "linux" || is_android) {
        "../../system_wrappers:field_trial",
        "//third_party/abseil-cpp/absl/memory",
+       "//third_party/abseil-cpp/absl/strings",
 +      "//third_party/boringssl",
        "//third_party/jni_zero",
      ]
    }
-@@ -1453,6 +1459,7 @@ if (current_os == "linux" || is_android) {
+@@ -1534,6 +1540,7 @@ if (current_os == "linux" || is_android) {
        "api/org/webrtc/SessionDescription.java",
        "api/org/webrtc/StatsObserver.java",
        "api/org/webrtc/StatsReport.java",
@@ -2134,7 +2144,7 @@ index 0000000000..a4ba76feaa
 +  private static native void nativeDecryptorAttach(
 +      long context, short participantId, long nativeRtpReceiver, @NonNull String tag);
 +
-+  private static short MIDS_MAX = 790;
++  private static final short MIDS_MAX = 790;
 +
 +  private static void validateMediaKey(@NonNull byte[] pcmk, short epoch, short ratchetCounter) {
 +    if (pcmk.length != 32) {
@@ -2299,10 +2309,10 @@ index 0000000000..a4ba76feaa
 +}
 diff --git a/sdk/android/src/jni/pc/threema_group_call_frame_crypto_context.cc b/sdk/android/src/jni/pc/threema_group_call_frame_crypto_context.cc
 new file mode 100644
-index 0000000000..6c225eab04
+index 0000000000..e3f7d519da
 --- /dev/null
 +++ b/sdk/android/src/jni/pc/threema_group_call_frame_crypto_context.cc
-@@ -0,0 +1,138 @@
+@@ -0,0 +1,139 @@
 +/*
 + * Copyright 2022 Threema GmbH. All Rights Reserved.
 + *
@@ -2314,6 +2324,7 @@ index 0000000000..6c225eab04
 +#include "sdk/android/src/jni/pc/threema_group_call_frame_crypto_context.h"
 +
 +#include "api/make_ref_counted.h"
++#include "api/media_types.h"
 +#include "api/rtp_receiver_interface.h"
 +#include "api/rtp_sender_interface.h"
 +#include "pc/threema_group_call_frame_transformer.h"
@@ -2325,16 +2336,16 @@ index 0000000000..6c225eab04
 +namespace webrtc {
 +namespace jni {
 +
-+static threema::Codec GetCodec(cricket::MediaType media_type) {
++static threema::Codec GetCodec(webrtc::MediaType media_type) {
 +  // Determine codec
 +  //
 +  // Note: This is making an assumption that audio is always Opus and video is
 +  // always VP8. If this ever changes, you will have to provide those
 +  // parameters.
 +  switch (media_type) {
-+    case cricket::MediaType::MEDIA_TYPE_AUDIO:
++    case webrtc::MediaType::AUDIO:
 +      return threema::Codec::kOpus;
-+    case cricket::MediaType::MEDIA_TYPE_VIDEO:
++    case webrtc::MediaType::VIDEO:
 +      return threema::Codec::kVp8;
 +    default:
 +      RTC_CHECK_NOTREACHED();
@@ -2377,7 +2388,7 @@ index 0000000000..6c225eab04
 +      j_context_pointer);
 +  auto transformer = context->GetEncryptor().CreateEncryptor(
 +      tag, GetCodec(sender->media_type()));
-+  sender->SetEncoderToPacketizerFrameTransformer(std::move(transformer));
++  sender->SetFrameTransformer(std::move(transformer));
 +}
 +
 +// IMPORTANT: Caller must ensure that `j_participant_id` is a valid participant
@@ -2436,7 +2447,7 @@ index 0000000000..6c225eab04
 +  auto transformer =
 +      context->GetDecryptor((uint16_t)j_participant_id)
 +          .CreateDecryptor(tag, GetCodec(receiver->media_type()));
-+  receiver->SetDepacketizerToDecoderFrameTransformer(std::move(transformer));
++  receiver->SetFrameTransformer(std::move(transformer));
 +}
 +
 +}  // namespace jni
@@ -2784,10 +2795,10 @@ index 0000000000..c464ae4664
 \ No newline at end of file
 diff --git a/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoDecryptor.mm b/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoDecryptor.mm
 new file mode 100644
-index 0000000000..333e319c34
+index 0000000000..636aee6d68
 --- /dev/null
 +++ b/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoDecryptor.mm
-@@ -0,0 +1,85 @@
+@@ -0,0 +1,84 @@
 +#import <Foundation/Foundation.h>
 +
 +#import "RTCRtpReceiver+Private.h"
@@ -2844,8 +2855,7 @@ index 0000000000..333e319c34
 +                                              getCodec:mediaType]);
 +
 +  auto nativeRtpReceiver = [receiver nativeRtpReceiver];
-+  nativeRtpReceiver->SetDepacketizerToDecoderFrameTransformer(
-+      std::move(transformer));
++  nativeRtpReceiver->SetFrameTransformer(std::move(transformer));
 +}
 +
 +- (void)remove {
@@ -2946,10 +2956,10 @@ index 0000000000..db1ede9eba
 \ No newline at end of file
 diff --git a/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoEncryptor.mm b/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoEncryptor.mm
 new file mode 100644
-index 0000000000..3524163f00
+index 0000000000..3a81eebf7f
 --- /dev/null
 +++ b/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoEncryptor.mm
-@@ -0,0 +1,64 @@
+@@ -0,0 +1,63 @@
 +#import <Foundation/Foundation.h>
 +
 +#import "RTCRtpReceiver.h"
@@ -2996,8 +3006,7 @@ index 0000000000..3524163f00
 +      [ThreemaGroupCallFrameCryptoContext getCodec:mediaType]);
 +
 +  auto nativeRtpSender = [sender nativeRtpSender];
-+  nativeRtpSender->SetEncoderToPacketizerFrameTransformer(
-+      std::move(transformer));
++  nativeRtpSender->SetFrameTransformer(std::move(transformer));
 +}
 +
 +- (void)remove {
