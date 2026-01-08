@@ -1,8 +1,8 @@
 diff --git a/modules/audio_coding/codecs/opus/audio_encoder_opus.cc b/modules/audio_coding/codecs/opus/audio_encoder_opus.cc
-index 83f356091c..6db1a44910 100644
+index c3c0f31ab1..e1c5d3a8d3 100644
 --- a/modules/audio_coding/codecs/opus/audio_encoder_opus.cc
 +++ b/modules/audio_coding/codecs/opus/audio_encoder_opus.cc
-@@ -208,10 +208,11 @@ int GetMultipliedBitrate(int bitrate, const std::vector<float>& multipliers) {
+@@ -222,10 +222,11 @@ int GetMultipliedBitrate(int bitrate, const std::vector<float>& multipliers) {
  
  void AudioEncoderOpusImpl::AppendSupportedEncoders(
      std::vector<AudioCodecSpec>* specs) {
