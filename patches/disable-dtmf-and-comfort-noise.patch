@@ -1,8 +1,8 @@
 diff --git a/media/engine/webrtc_voice_engine.cc b/media/engine/webrtc_voice_engine.cc
-index 1998317924..667b9c8ddb 100644
+index 4000fb1980..86d580aaf9 100644
 --- a/media/engine/webrtc_voice_engine.cc
 +++ b/media/engine/webrtc_voice_engine.cc
-@@ -370,12 +370,6 @@ std::vector<Codec> LegacyCollectCodecs(const std::vector<AudioCodecSpec>& specs,
+@@ -365,12 +365,6 @@ std::vector<Codec> LegacyCollectCodecs(const std::vector<AudioCodecSpec>& specs,
    PayloadTypePicker pt_mapper;
    std::vector<Codec> out;
  
@@ -15,7 +15,7 @@ index 1998317924..667b9c8ddb 100644
    for (const auto& spec : specs) {
      Codec codec = CreateAudioCodec(spec.format);
      if (allocate_pt) {
-@@ -391,21 +385,6 @@ std::vector<Codec> LegacyCollectCodecs(const std::vector<AudioCodecSpec>& specs,
+@@ -386,21 +380,6 @@ std::vector<Codec> LegacyCollectCodecs(const std::vector<AudioCodecSpec>& specs,
            FeedbackParam(kRtcpFbParamTransportCc, kParamValueEmpty));
      }
  
@@ -37,7 +37,7 @@ index 1998317924..667b9c8ddb 100644
      out.push_back(codec);
  
      // TODO(hta):  Don't assign RED codecs until we know that the PT for Opus
-@@ -427,27 +406,6 @@ std::vector<Codec> LegacyCollectCodecs(const std::vector<AudioCodecSpec>& specs,
+@@ -422,27 +401,6 @@ std::vector<Codec> LegacyCollectCodecs(const std::vector<AudioCodecSpec>& specs,
      }
    }
  
@@ -65,7 +65,7 @@ index 1998317924..667b9c8ddb 100644
    return out;
  }
  
-@@ -1453,20 +1411,6 @@ bool WebRtcVoiceSendChannel::SetSendCodecs(
+@@ -1447,21 +1405,6 @@ bool WebRtcVoiceSendChannel::SetSendCodecs(
      }
    }
  
@@ -76,7 +76,8 @@ index 1998317924..667b9c8ddb 100644
 -  for (const Codec& codec : codecs) {
 -    if (IsCodec(codec, kDtmfCodecName)) {
 -      dtmf_codecs.push_back(codec);
--      if (!dtmf_payload_type_ || codec.clockrate < dtmf_payload_freq_) {
+-      if ((dtmf_payload_type_ == PayloadType::NotSet()) ||
+-          codec.clockrate < dtmf_payload_freq_) {
 -        dtmf_payload_type_ = codec.id;
 -        dtmf_payload_freq_ = codec.clockrate;
 -      }
@@ -86,7 +87,7 @@ index 1998317924..667b9c8ddb 100644
    // Scan through the list to figure out the codec to use for sending.
    std::optional<AudioSendStream::Config::SendCodecSpec> send_codec_spec;
    BitrateConstraints bitrate_config;
-@@ -1506,35 +1450,6 @@ bool WebRtcVoiceSendChannel::SetSendCodecs(
+@@ -1501,35 +1444,6 @@ bool WebRtcVoiceSendChannel::SetSendCodecs(
    }
  
    RTC_DCHECK(voice_codec_info);
@@ -104,7 +105,7 @@ index 1998317924..667b9c8ddb 100644
 -          RTC_LOG(LS_WARNING)
 -              << "CN frequency " << cn_codec.clockrate << " not supported.";
 -        } else {
--          send_codec_spec->cng_payload_type = cn_codec.id;
+-          send_codec_spec->cng_payload_type = cn_codec.id.value();
 -        }
 -        break;
 -      }
