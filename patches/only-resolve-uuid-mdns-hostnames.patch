@@ -1,5 +1,5 @@
 diff --git a/p2p/base/p2p_transport_channel.cc b/p2p/base/p2p_transport_channel.cc
-index c1a006308d..c2d0672ecc 100644
+index 76b5006e55..34ee023677 100644
 --- a/p2p/base/p2p_transport_channel.cc
 +++ b/p2p/base/p2p_transport_channel.cc
 @@ -18,6 +18,7 @@
@@ -8,9 +8,9 @@ index c1a006308d..c2d0672ecc 100644
  #include <optional>
 +#include <regex>
  #include <set>
+ #include <span>
  #include <string>
- #include <tuple>
-@@ -1192,13 +1193,23 @@ void P2PTransportChannel::ResolveHostnameCandidate(const Candidate& candidate) {
+@@ -1194,13 +1195,23 @@ void P2PTransportChannel::ResolveHostnameCandidate(const Candidate& candidate) {
      return;
    }
  
@@ -36,7 +36,7 @@ index c1a006308d..c2d0672ecc 100644
  
  void P2PTransportChannel::AddRemoteCandidate(const Candidate& candidate) {
 diff --git a/p2p/base/p2p_transport_channel.h b/p2p/base/p2p_transport_channel.h
-index e44b6eece4..5842a44275 100644
+index 92f8dfe2bd..911e5c8a9c 100644
 --- a/p2p/base/p2p_transport_channel.h
 +++ b/p2p/base/p2p_transport_channel.h
 @@ -26,6 +26,7 @@
@@ -44,10 +44,10 @@ index e44b6eece4..5842a44275 100644
  #include <memory>
  #include <optional>
 +#include <regex>
+ #include <span>
  #include <string>
  #include <vector>
- 
-@@ -501,6 +502,16 @@ class RTC_EXPORT P2PTransportChannel : public IceTransportInternal,
+@@ -494,6 +495,16 @@ class RTC_EXPORT P2PTransportChannel : public IceTransportInternal,
    std::vector<CandidateAndPermission> permission_queries_
        RTC_GUARDED_BY(&network_thread_);
  

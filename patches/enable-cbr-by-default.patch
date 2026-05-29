@@ -1,5 +1,5 @@
 diff --git a/modules/audio_coding/codecs/opus/audio_encoder_opus.cc b/modules/audio_coding/codecs/opus/audio_encoder_opus.cc
-index c3c0f31ab1..e1c5d3a8d3 100644
+index 451fe8b9e2..442ea2f06b 100644
 --- a/modules/audio_coding/codecs/opus/audio_encoder_opus.cc
 +++ b/modules/audio_coding/codecs/opus/audio_encoder_opus.cc
 @@ -222,10 +222,11 @@ int GetMultipliedBitrate(int bitrate, const std::vector<float>& multipliers) {

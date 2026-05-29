@@ -85,7 +85,7 @@ index 6070135b3e..ab7a07a516 100644
     * Generate a new RtcCertificatePem with the default settings of KeyType = ECDSA and
     * expires = 30 days.
 diff --git a/sdk/android/src/jni/pc/rtc_certificate.cc b/sdk/android/src/jni/pc/rtc_certificate.cc
-index dffe8ea356..7879b2a5d3 100644
+index 72456c242c..7058f8fef5 100644
 --- a/sdk/android/src/jni/pc/rtc_certificate.cc
 +++ b/sdk/android/src/jni/pc/rtc_certificate.cc
 @@ -34,8 +34,11 @@ RTCCertificatePEM JavaToNativeRTCCertificatePEM(
@@ -190,10 +190,10 @@ index 51461e92f8..106bb0274b 100644
  }
  
 diff --git a/sdk/objc/api/peerconnection/RTCConfiguration.mm b/sdk/objc/api/peerconnection/RTCConfiguration.mm
-index a882245200..78746ce982 100644
+index eafde80865..afad9369f1 100644
 --- a/sdk/objc/api/peerconnection/RTCConfiguration.mm
 +++ b/sdk/objc/api/peerconnection/RTCConfiguration.mm
-@@ -91,7 +91,8 @@
+@@ -92,7 +92,8 @@
        webrtc::RTCCertificatePEM native_pem = native_cert->ToPEM();
        _certificate = [[RTC_OBJC_TYPE(RTCCertificate) alloc]
            initWithPrivateKey:@(native_pem.private_key().c_str())
@@ -203,7 +203,7 @@ index a882245200..78746ce982 100644
      }
      _iceTransportPolicy =
          [[self class] transportPolicyForTransportsType:config.type];
-@@ -246,8 +247,9 @@
+@@ -247,8 +248,9 @@
      RTC_LOG(LS_INFO) << "Have configured cert - using it.";
      std::string pem_private_key = [[_certificate private_key] UTF8String];
      std::string pem_certificate = [[_certificate certificate] UTF8String];
