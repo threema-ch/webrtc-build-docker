@@ -1,8 +1,20 @@
 diff --git a/rtc_base/openssl_stream_adapter.cc b/rtc_base/openssl_stream_adapter.cc
-index e3a75db8f4..09d711f077 100644
+index a40c4ec6dc..bb22ef2883 100644
 --- a/rtc_base/openssl_stream_adapter.cc
 +++ b/rtc_base/openssl_stream_adapter.cc
-@@ -111,11 +111,7 @@ uint16_t GetMaxVersion(SSLMode ssl_mode, SSLProtocolVersion version) {
+@@ -105,11 +105,7 @@ Mutex& GlobalClockMutex() {
+ }
+ #endif
+ 
+-#ifdef DTLS1_3_VERSION
+ #define MAX_SSL_PROTOCOL_DTLS SSL_PROTOCOL_DTLS_13
+-#else
+-#define MAX_SSL_PROTOCOL_DTLS SSL_PROTOCOL_DTLS_12
+-#endif
+ 
+ uint16_t GetMaxVersion(SSLMode ssl_mode, SSLProtocolVersion version) {
+   switch (ssl_mode) {
+@@ -122,11 +118,7 @@ uint16_t GetMaxVersion(SSLMode ssl_mode, SSLProtocolVersion version) {
          case SSL_PROTOCOL_TLS_12:
            return TLS1_2_VERSION;
          case SSL_PROTOCOL_TLS_13:
@@ -14,9 +26,9 @@ index e3a75db8f4..09d711f077 100644
        }
      case SSL_MODE_DTLS:
        switch (version) {
-@@ -125,53 +121,13 @@ uint16_t GetMaxVersion(SSLMode ssl_mode, SSLProtocolVersion version) {
-         case SSL_PROTOCOL_DTLS_12:
+@@ -136,11 +128,7 @@ uint16_t GetMaxVersion(SSLMode ssl_mode, SSLProtocolVersion version) {
            return DTLS1_2_VERSION;
+         case SSL_PROTOCOL_NOT_GIVEN:
          case SSL_PROTOCOL_DTLS_13:
 -#ifdef DTLS1_3_VERSION
            return DTLS1_3_VERSION;
@@ -26,58 +38,7 @@ index e3a75db8f4..09d711f077 100644
        }
    }
  }
- 
--constexpr int kForceDtls13Off = 0;
--#ifdef DTLS1_3_VERSION
- constexpr int kForceDtls13Enabled = 1;
- constexpr int kForceDtls13Only = 2;
--#endif
--
--int GetForceDtls13(const FieldTrialsView* field_trials) {
--#ifdef DTLS1_3_VERSION
--  if (field_trials) {
--#if defined(WEBRTC_CHROMIUM_BUILD)
--    if (field_trials->IsDisabled("WebRTC-ForceDtls13")) {
--      RTC_LOG(LS_WARNING) << "WebRTC-ForceDtls13 Disabled";
--      return kForceDtls13Off;
--    }
--#else
--    if (field_trials->IsEnabled("WebRTC-ForceDtls13")) {
--      RTC_LOG(LS_WARNING) << "WebRTC-ForceDtls13 Enabled";
--      return kForceDtls13Enabled;
--    }
--#endif  // defined(WEBRTC_CHROMIUM_BUILD)
--    if (field_trials->Lookup("WebRTC-ForceDtls13") == "Only") {
--      RTC_LOG(LS_WARNING) << "WebRTC-ForceDtls13 Only";
--      return kForceDtls13Only;
--    }
--  }
--  // Default behavior:
--#if defined(WEBRTC_CHROMIUM_BUILD)
--  RTC_LOG(LS_WARNING) << "WebRTC-ForceDtls13 Enabled";
--  return kForceDtls13Enabled;
--#else
--  RTC_LOG(LS_WARNING) << "WebRTC-ForceDtls13 Disabled";
--  return kForceDtls13Off;
--#endif  // defined(WEBRTC_CHROMIUM_BUILD)
--
--#else
--  return kForceDtls13Off;
--#endif  // DTLS1_3_VERSION
--}
- 
- #ifdef OPENSSL_IS_BORINGSSL
- std::string GetOpenSslError() {
-@@ -335,7 +291,7 @@ OpenSSLStreamAdapter::OpenSSLStreamAdapter(
-       ssl_ctx_(nullptr),
-       ssl_mode_(SSL_MODE_DTLS),
-       ssl_max_version_(SSL_PROTOCOL_DTLS_12),
--      force_dtls_13_(GetForceDtls13(field_trials)),
-+      force_dtls_13_(kForceDtls13Enabled),
-       disable_ssl_group_ids_(field_trials && field_trials->IsEnabled(
-                                                  "WebRTC-DisableSslGroupIds")) {
-   stream_->SetEventCallback(
-@@ -438,11 +394,9 @@ SSLProtocolVersion OpenSSLStreamAdapter::GetSslVersion() const {
+@@ -411,11 +399,9 @@ SSLProtocolVersion OpenSSLStreamAdapter::GetSslVersion() const {
      } else if (ssl_version == DTLS1_2_VERSION) {
        return SSL_PROTOCOL_DTLS_12;
      }
@@ -89,7 +50,7 @@ index e3a75db8f4..09d711f077 100644
    } else {
      if (ssl_version == TLS1_VERSION) {
        return SSL_PROTOCOL_TLS_10;
-@@ -451,11 +405,9 @@ SSLProtocolVersion OpenSSLStreamAdapter::GetSslVersion() const {
+@@ -424,11 +410,9 @@ SSLProtocolVersion OpenSSLStreamAdapter::GetSslVersion() const {
      } else if (ssl_version == TLS1_2_VERSION) {
        return SSL_PROTOCOL_TLS_12;
      }
@@ -101,37 +62,21 @@ index e3a75db8f4..09d711f077 100644
    }
  
    return SSL_PROTOCOL_NOT_GIVEN;
-@@ -1154,14 +1106,12 @@ SSL_CTX* OpenSSLStreamAdapter::SetupSSLContext() {
-   auto min_version =
-       ssl_mode_ == SSL_MODE_DTLS ? DTLS1_2_VERSION : TLS1_2_VERSION;
-   auto max_version = GetMaxVersion(ssl_mode_, ssl_max_version_);
--#ifdef DTLS1_3_VERSION
-   if (force_dtls_13_ == kForceDtls13Enabled) {
-     max_version = DTLS1_3_VERSION;
-   } else if (force_dtls_13_ == kForceDtls13Only) {
-     min_version = DTLS1_3_VERSION;
-     max_version = DTLS1_3_VERSION;
-   }
--#endif
- 
-   SSL_CTX_set_min_proto_version(ctx, min_version);
-   SSL_CTX_set_max_proto_version(ctx, max_version);
-@@ -1206,10 +1156,10 @@ SSL_CTX* OpenSSLStreamAdapter::SetupSSLContext() {
+@@ -1203,9 +1187,10 @@ SSL_CTX* OpenSSLStreamAdapter::SetupSSLContext() {
    // remove HMAC-SHA256 and HMAC-SHA384 cipher suites, not GCM cipher suites
    // with SHA256 or SHA384 as the handshake hash.
    // This matches the list of SSLClientSocketImpl in Chromium.
 -  SSL_CTX_set_cipher_list(
 -      ctx,
 -      "DEFAULT:!NULL:!aNULL:!SHA256:!SHA384:!aECDH:!AESGCM+AES256:!aPSK:!3DES");
--
 +  SSL_CTX_set_cipher_list(ctx,
 +                          "ECDHE-ECDSA-CHACHA20-POLY1305:"
 +                          "ECDHE-ECDSA-AES256-GCM-SHA384:"
 +                          "ECDHE-ECDSA-AES128-GCM-SHA256");
+ 
    if (!srtp_ciphers_.empty()) {
      if (SSL_CTX_set_tlsext_use_srtp(ctx, srtp_ciphers_.c_str())) {
-       SSL_CTX_free(ctx);
-@@ -1443,11 +1393,7 @@ void OpenSSLStreamAdapter::EnableTimeCallbackForTesting() {
+@@ -1440,11 +1425,7 @@ void OpenSSLStreamAdapter::EnableTimeCallbackForTesting() {
  }
  
  SSLProtocolVersion OpenSSLStreamAdapter::GetMaxSupportedDTLSProtocolVersion() {
@@ -144,10 +89,10 @@ index e3a75db8f4..09d711f077 100644
  
  bool OpenSSLStreamAdapter::SetSslGroupIds(const std::vector<uint16_t>& groups) {
 diff --git a/rtc_base/ssl_stream_adapter.cc b/rtc_base/ssl_stream_adapter.cc
-index 59216f0357..e87c8f685e 100644
+index 8b6004ac71..3e24ee2770 100644
 --- a/rtc_base/ssl_stream_adapter.cc
 +++ b/rtc_base/ssl_stream_adapter.cc
-@@ -117,25 +117,9 @@ SSLStreamAdapter::GetEphemeralKeyExchangeCipherGroupName(uint16_t group_id) {
+@@ -125,25 +125,9 @@ SSLStreamAdapter::GetEphemeralKeyExchangeCipherGroupName(uint16_t group_id) {
  std::set<uint16_t>
  SSLStreamAdapter::GetSupportedEphemeralKeyExchangeCipherGroups() {
    return {
@@ -176,7 +121,7 @@ index 59216f0357..e87c8f685e 100644
    };
  }
  
-@@ -144,33 +128,12 @@ SSLStreamAdapter::GetDefaultEphemeralKeyExchangeCipherGroups(
+@@ -152,33 +136,12 @@ SSLStreamAdapter::GetDefaultEphemeralKeyExchangeCipherGroups(
      const FieldTrialsView* field_trials) {
    // It would be nice if BoringSSL had a function like this!
    // from boringssl/src/ssl/extensions.cc kDefaultGroups.

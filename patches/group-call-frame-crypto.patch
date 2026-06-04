@@ -1,8 +1,8 @@
 diff --git a/pc/BUILD.gn b/pc/BUILD.gn
-index 5ff1d72614..41b3053236 100644
+index 1f0b54edee..bfe4d7ec47 100644
 --- a/pc/BUILD.gn
 +++ b/pc/BUILD.gn
-@@ -1387,6 +1387,26 @@ rtc_library("peer_connection") {
+@@ -1392,6 +1392,26 @@ rtc_library("peer_connection") {
    ]
  }
  
@@ -1133,6 +1133,22 @@ index 0000000000..4af223855b
 +    "ref/blake2b-ref.c",
 +  ]
 +}
+diff --git a/rtc_base/third_party/threema-blake2b/LICENSE b/rtc_base/third_party/threema-blake2b/LICENSE
+new file mode 100644
+index 0000000000..69e4fc10bb
+--- /dev/null
++++ b/rtc_base/third_party/threema-blake2b/LICENSE
+@@ -0,0 +1,10 @@
++Copyright 2012, Samuel Neves <sneves@dei.uc.pt>.  You may use this under the
++terms of the CC0, the OpenSSL Licence, or the Apache Public License 2.0, at
++your option.  The terms of these licenses can be found at:
++
++- CC0 1.0 Universal : http://creativecommons.org/publicdomain/zero/1.0
++- OpenSSL license   : https://www.openssl.org/source/license.html
++- Apache 2.0        : http://www.apache.org/licenses/LICENSE-2.0
++
++More information about the BLAKE2 hash function can be found at
++https://blake2.net.
 diff --git a/rtc_base/third_party/threema-blake2b/blake2b.c b/rtc_base/third_party/threema-blake2b/blake2b.c
 new file mode 100644
 index 0000000000..f820a97910
@@ -1989,10 +2005,10 @@ index 0000000000..d8830fb61e
 +}
 +#endif
 diff --git a/sdk/BUILD.gn b/sdk/BUILD.gn
-index 5252eb9193..035704234f 100644
+index 1a7fd8e3f6..c702b7c5d8 100644
 --- a/sdk/BUILD.gn
 +++ b/sdk/BUILD.gn
-@@ -1068,6 +1068,15 @@ if (is_ios || is_mac) {
+@@ -1081,6 +1081,15 @@ if (is_ios || is_mac) {
          "objc/api/peerconnection/RTCVideoTrack+Private.h",
          "objc/api/peerconnection/RTCVideoTrack.h",
          "objc/api/peerconnection/RTCVideoTrack.mm",
@@ -2008,7 +2024,7 @@ index 5252eb9193..035704234f 100644
        ]
  
        configs += [
-@@ -1096,6 +1105,7 @@ if (is_ios || is_mac) {
+@@ -1109,6 +1118,7 @@ if (is_ios || is_mac) {
          "../api:dtmf_sender_interface",
          "../api:enable_media",
          "../api:field_trials_view",
@@ -2016,7 +2032,7 @@ index 5252eb9193..035704234f 100644
          "../api:jsep",
          "../api:legacy_stats_types",
          "../api:media_stream_interface",
-@@ -1132,6 +1142,7 @@ if (is_ios || is_mac) {
+@@ -1145,6 +1155,7 @@ if (is_ios || is_mac) {
          "../media:rtc_media_base",
          "../modules/video_coding:video_codec_interface",
          "../pc:peer_connection_factory",
@@ -2024,7 +2040,7 @@ index 5252eb9193..035704234f 100644
          "../pc:webrtc_sdp",
          "../rtc_base:checks",
          "../rtc_base:event_tracer",
-@@ -1147,6 +1158,7 @@ if (is_ios || is_mac) {
+@@ -1160,6 +1171,7 @@ if (is_ios || is_mac) {
          "../rtc_base/system:plan_b_only",
          "../stats:rtc_stats",
          "../system_wrappers:metrics",
@@ -2032,7 +2048,7 @@ index 5252eb9193..035704234f 100644
        ]
  
        if (is_ios) {
-@@ -1393,6 +1405,9 @@ if (is_ios || is_mac) {
+@@ -1410,6 +1422,9 @@ if (is_ios || is_mac) {
            "objc/api/peerconnection/RTCCryptoOptions.h",
            "objc/api/peerconnection/RTCVideoSource.h",
            "objc/api/peerconnection/RTCVideoTrack.h",
@@ -2042,7 +2058,7 @@ index 5252eb9193..035704234f 100644
            "objc/api/video_codec/RTCVideoCodecConstants.h",
            "objc/api/video_codec/RTCVideoDecoderVP8.h",
            "objc/api/video_codec/RTCVideoDecoderVP9.h",
-@@ -1508,6 +1523,9 @@ if (is_ios || is_mac) {
+@@ -1525,6 +1540,9 @@ if (is_ios || is_mac) {
            "objc/api/peerconnection/RTCTracing.h",
            "objc/api/peerconnection/RTCVideoSource.h",
            "objc/api/peerconnection/RTCVideoTrack.h",
@@ -2053,10 +2069,10 @@ index 5252eb9193..035704234f 100644
            "objc/api/video_codec/RTCVideoDecoderVP8.h",
            "objc/api/video_codec/RTCVideoDecoderVP9.h",
 diff --git a/sdk/android/BUILD.gn b/sdk/android/BUILD.gn
-index f709c40ffc..3382ca1b2d 100644
+index 1feaf8cddf..44e9ba6f5b 100644
 --- a/sdk/android/BUILD.gn
 +++ b/sdk/android/BUILD.gn
-@@ -331,6 +331,7 @@ if (is_android) {
+@@ -332,6 +332,7 @@ if (is_android) {
        "api/org/webrtc/SessionDescription.java",
        "api/org/webrtc/StatsObserver.java",
        "api/org/webrtc/StatsReport.java",
@@ -2064,7 +2080,7 @@ index f709c40ffc..3382ca1b2d 100644
        "api/org/webrtc/TurnCustomizer.java",
        "api/org/webrtc/VideoProcessor.java",
        "api/org/webrtc/VideoSource.java",
-@@ -817,6 +818,8 @@ if (current_os == "linux" || is_android) {
+@@ -818,6 +819,8 @@ if (current_os == "linux" || is_android) {
        "src/jni/pc/ssl_certificate_verifier_wrapper.h",
        "src/jni/pc/stats_observer.cc",
        "src/jni/pc/stats_observer.h",
@@ -2073,7 +2089,7 @@ index f709c40ffc..3382ca1b2d 100644
        "src/jni/pc/turn_customizer.cc",
        "src/jni/pc/turn_customizer.h",
      ]
-@@ -838,6 +841,7 @@ if (current_os == "linux" || is_android) {
+@@ -839,6 +842,7 @@ if (current_os == "linux" || is_android) {
        "../../api:dtmf_sender_interface",
        "../../api:enable_media",
        "../../api:fec_controller_api",
@@ -2081,7 +2097,7 @@ index f709c40ffc..3382ca1b2d 100644
        "../../api:jsep",
        "../../api:libjingle_peerconnection_api",
        "../../api:make_ref_counted",
-@@ -879,6 +883,7 @@ if (current_os == "linux" || is_android) {
+@@ -880,6 +884,7 @@ if (current_os == "linux" || is_android) {
        "../../p2p:port",
        "../../pc:media_stream_observer",
        "../../pc:peer_connection_factory",
@@ -2089,7 +2105,7 @@ index f709c40ffc..3382ca1b2d 100644
        "../../pc:webrtc_sdp",
        "../../rtc_base:buffer",
        "../../rtc_base:checks",
-@@ -899,6 +904,7 @@ if (current_os == "linux" || is_android) {
+@@ -900,6 +905,7 @@ if (current_os == "linux" || is_android) {
        "../../stats:rtc_stats",
        "//third_party/abseil-cpp/absl/memory",
        "//third_party/abseil-cpp/absl/strings",
@@ -2097,7 +2113,7 @@ index f709c40ffc..3382ca1b2d 100644
        "//third_party/jni_zero",
      ]
    }
-@@ -1566,6 +1572,7 @@ if (current_os == "linux" || is_android) {
+@@ -1567,6 +1573,7 @@ if (current_os == "linux" || is_android) {
        "api/org/webrtc/SessionDescription.java",
        "api/org/webrtc/StatsObserver.java",
        "api/org/webrtc/StatsReport.java",
@@ -2589,7 +2605,7 @@ index 0000000000..8f14f8acb5
 \ No newline at end of file
 diff --git a/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoContext.mm b/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoContext.mm
 new file mode 100644
-index 0000000000..57271fe2b5
+index 0000000000..8ee96a372e
 --- /dev/null
 +++ b/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoContext.mm
 @@ -0,0 +1,124 @@
@@ -2611,36 +2627,36 @@ index 0000000000..57271fe2b5
 +#import "ThreemaGroupCallFrameCryptoEncryptor.h"
 +
 +@implementation ThreemaGroupCallFrameCryptoContext {
-+  webrtc::scoped_refptr<threema::GroupCallFrameCryptoContext> context;
++  webrtc::scoped_refptr<threema::GroupCallFrameCryptoContext> _context;
 +  NSMutableDictionary<NSString *, ThreemaGroupCallFrameCryptoDecryptor *>
-+      *decryptorDict;
-+  ThreemaGroupCallFrameCryptoEncryptor *encryptor;
++      *_decryptorDict;
++  ThreemaGroupCallFrameCryptoEncryptor *_encryptor;
 +}
 +
 +- (instancetype)initWithgckh:(NSData *)gckh {
 +  self = [super init];
 +  if (self) {
-+    self->context =
-+        webrtc::make_ref_counted<threema::GroupCallFrameCryptoContext>(
-+            (const uint8_t *)gckh.bytes);
-+    self->decryptorDict = [[NSMutableDictionary alloc] init];
++    _context = webrtc::make_ref_counted<threema::GroupCallFrameCryptoContext>(
++        (const uint8_t *)gckh.bytes);
 +
-+    self->encryptor = [[ThreemaGroupCallFrameCryptoEncryptor alloc]
-+        initWithContext:self->context];
++    _decryptorDict = [[NSMutableDictionary alloc] init];
++
++    _encryptor =
++        [[ThreemaGroupCallFrameCryptoEncryptor alloc] initWithContext:_context];
 +  }
 +  return self;
 +}
 +
 +- (ThreemaGroupCallFrameCryptoEncryptor *)getEncryptor {
 +  [self ensureContext];
-+  return encryptor;
++  return _encryptor;
 +}
 +
 +- (nullable ThreemaGroupCallFrameCryptoDecryptor *)getDecryptorFor:
 +    (UInt16)participantId {
 +  [self ensureContext];
 +  NSString *key = [NSString stringWithFormat:@"%hu", participantId];
-+  return decryptorDict[key];
++  return _decryptorDict[key];
 +}
 +
 +- (ThreemaGroupCallFrameCryptoDecryptor *)addDecryptorFor:
@@ -2648,7 +2664,7 @@ index 0000000000..57271fe2b5
 +  [self ensureContext];
 +  NSString *key = [NSString stringWithFormat:@"%hu", participantId];
 +
-+  if (decryptorDict[key] != nil) {
++  if (_decryptorDict[key] != nil) {
 +    @throw [NSException exceptionWithName:NSInvalidArgumentException
 +                                   reason:@"Decryptor for the given "
 +                                          @"participant id already existing."
@@ -2658,8 +2674,8 @@ index 0000000000..57271fe2b5
 +  ThreemaGroupCallFrameCryptoDecryptor *decryptor =
 +      [[ThreemaGroupCallFrameCryptoDecryptor alloc]
 +          initWithParticipantId:participantId
-+                        context:self->context];
-+  decryptorDict[key] = decryptor;
++                        context:_context];
++  _decryptorDict[key] = decryptor;
 +
 +  return decryptor;
 +}
@@ -2667,28 +2683,28 @@ index 0000000000..57271fe2b5
 +- (void)removeDecryptorFor:(UInt16)participantId {
 +  [self ensureContext];
 +  NSString *key = [NSString stringWithFormat:@"%hu", participantId];
-+  [decryptorDict removeObjectForKey:key];
++  [_decryptorDict removeObjectForKey:key];
 +}
 +
 +- (void)dispose {
-+  if (context == nil) {
++  if (_context == nil) {
 +    return;
 +  }
 +
 +  for (ThreemaGroupCallFrameCryptoDecryptor *decryptor in
-+       [decryptorDict allValues]) {
++       [_decryptorDict allValues]) {
 +    [decryptor remove];
 +  }
 +
-+  [decryptorDict removeAllObjects];
++  [_decryptorDict removeAllObjects];
 +
-+  [encryptor remove];
-+  self->context = nil;
++  [_encryptor remove];
++  _context = nil;
 +}
 +
 +- (webrtc::scoped_refptr<threema::GroupCallFrameCryptoContext>)ensureContext {
-+  if (self->context) {
-+    return self->context;
++  if (_context) {
++    return _context;
 +  }
 +  @throw [NSException exceptionWithName:NSInvalidArgumentException
 +                                 reason:@"Missing Context"
@@ -2717,7 +2733,6 @@ index 0000000000..57271fe2b5
 +}
 +
 +@end
-\ No newline at end of file
 diff --git a/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoDecryptor+Private.h b/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoDecryptor+Private.h
 new file mode 100644
 index 0000000000..6b5ba7fa79
@@ -2797,7 +2812,7 @@ index 0000000000..c464ae4664
 \ No newline at end of file
 diff --git a/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoDecryptor.mm b/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoDecryptor.mm
 new file mode 100644
-index 0000000000..636aee6d68
+index 0000000000..5a1a452429
 --- /dev/null
 +++ b/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoDecryptor.mm
 @@ -0,0 +1,84 @@
@@ -2812,7 +2827,7 @@ index 0000000000..636aee6d68
 +#import "ThreemaGroupCallFrameCryptoDecryptor.h"
 +
 +@implementation ThreemaGroupCallFrameCryptoDecryptor {
-+  webrtc::scoped_refptr<threema::GroupCallFrameCryptoContext> context;
++  webrtc::scoped_refptr<threema::GroupCallFrameCryptoContext> _context;
 +}
 +
 +static const UInt16 MIDS_MAX = 790;
@@ -2827,7 +2842,7 @@ index 0000000000..636aee6d68
 +
 +    _participantId = participantId;
 +
-+    self->context = context;
++    _context = context;
 +
 +    auto ensuredContext = [self ensureContext];
 +
@@ -2863,12 +2878,12 @@ index 0000000000..636aee6d68
 +- (void)remove {
 +  auto ensuredContext = [self ensureContext];
 +  ensuredContext->RemoveDecryptor((uint16_t)_participantId);
-+  self->context = nil;
++  _context = nil;
 +}
 +
 +- (webrtc::scoped_refptr<threema::GroupCallFrameCryptoContext>)ensureContext {
-+  if (self->context) {
-+    return self->context;
++  if (_context) {
++    return _context;
 +  }
 +  @throw [NSException exceptionWithName:NSInvalidArgumentException
 +                                 reason:@"Decryptor has been removed"
@@ -2885,7 +2900,6 @@ index 0000000000..636aee6d68
 +}
 +
 +@end
-\ No newline at end of file
 diff --git a/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoEncryptor+Private.h b/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoEncryptor+Private.h
 new file mode 100644
 index 0000000000..493351fb57
@@ -2958,7 +2972,7 @@ index 0000000000..db1ede9eba
 \ No newline at end of file
 diff --git a/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoEncryptor.mm b/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoEncryptor.mm
 new file mode 100644
-index 0000000000..3a81eebf7f
+index 0000000000..e522265e7a
 --- /dev/null
 +++ b/sdk/objc/api/peerconnection/ThreemaGroupCallFrameCryptoEncryptor.mm
 @@ -0,0 +1,63 @@
@@ -2977,14 +2991,14 @@ index 0000000000..3a81eebf7f
 +#import "ThreemaGroupCallFrameCryptoEncryptor.h"
 +
 +@implementation ThreemaGroupCallFrameCryptoEncryptor {
-+  webrtc::scoped_refptr<threema::GroupCallFrameCryptoContext> context;
++  webrtc::scoped_refptr<threema::GroupCallFrameCryptoContext> _context;
 +}
 +
 +- (instancetype)initWithContext:
 +    (webrtc::scoped_refptr<threema::GroupCallFrameCryptoContext>)context {
 +  self = [super init];
 +  if (self) {
-+    self->context = context;
++    _context = context;
 +  }
 +  return self;
 +}
@@ -3012,12 +3026,12 @@ index 0000000000..3a81eebf7f
 +}
 +
 +- (void)remove {
-+  self->context = nil;
++  _context = nil;
 +}
 +
 +- (webrtc::scoped_refptr<threema::GroupCallFrameCryptoContext>)ensureContext {
-+  if (self->context) {
-+    return self->context;
++  if (_context) {
++    return _context;
 +  }
 +  @throw [NSException exceptionWithName:NSInvalidArgumentException
 +                                 reason:@"Missing Context"
@@ -3025,4 +3039,17 @@ index 0000000000..3a81eebf7f
 +}
 +
 +@end
-\ No newline at end of file
+diff --git a/tools_webrtc/libs/generate_licenses.py b/tools_webrtc/libs/generate_licenses.py
+index ac65a97b48..7e0bed44e7 100755
+--- a/tools_webrtc/libs/generate_licenses.py
++++ b/tools_webrtc/libs/generate_licenses.py
+@@ -89,6 +89,9 @@ LIB_TO_LICENSES_DICT = {
+     # Compile time dependencies, no license needed:
+     'ow2_asm': [],
+     'jdk': [],
++
++    # Threema hacked in dependencies
++    'threema-blake2b': ['rtc_base/third_party/threema-blake2b/LICENSE'],
+ }
+ 
+ # Third_party library _regex_ to licences mapping. Keys are regular expression

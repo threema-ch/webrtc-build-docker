@@ -1,5 +1,5 @@
 diff --git a/sdk/android/api/org/webrtc/CryptoOptions.java b/sdk/android/api/org/webrtc/CryptoOptions.java
-index 23f1e70f5a..d92073d387 100644
+index cb302df649..b7ee9efc59 100644
 --- a/sdk/android/api/org/webrtc/CryptoOptions.java
 +++ b/sdk/android/api/org/webrtc/CryptoOptions.java
 @@ -35,6 +35,11 @@ public final class CryptoOptions {
@@ -30,12 +30,12 @@ index 23f1e70f5a..d92073d387 100644
        return enableAes128Sha1_32CryptoCipher;
      }
  
-+    @CalledByNative("Srtp")
++    @CalledByNative
 +    public boolean getEnableAes128Sha1_80CryptoCipher() {
 +      return enableAes128Sha1_80CryptoCipher;
 +    }
 +
-     @CalledByNative("Srtp")
+     @CalledByNative
      public boolean getEnableEncryptedRtpHeaderExtensions() {
        return enableEncryptedRtpHeaderExtensions;
 @@ -90,9 +101,10 @@ public final class CryptoOptions {
