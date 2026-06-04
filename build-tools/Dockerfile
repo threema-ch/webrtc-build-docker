@@ -39,9 +39,9 @@ ENV PATH /opt/depot_tools:$PATH
 RUN mkdir /webrtc && chown $UID:$GID /webrtc
 
 # Setup CCache
-ENV CCACHE_DIR /webrtc/.ccache
-ENV CCACHE_BASEDIR /webrtc/src
-ENV CCACHE_SLOPPINESS include_file_mtime
+ENV CCACHE_DIR /webrtc/.ccache \
+    CCACHE_BASEDIR /webrtc/src \
+    CCACHE_SLOPPINESS include_file_mtime
 
 # Run as user
 USER $USERNAME

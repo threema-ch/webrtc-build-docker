@@ -1,6 +1,4 @@
-*.swp
-.vscode/
-out/
-out-*/
-webrtc/
 /.vscode/
+/artifacts/
+/build/
+/webrtc/
