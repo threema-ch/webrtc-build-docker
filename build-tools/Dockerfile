@@ -33,15 +33,15 @@ RUN groupadd -g $GID -o $USERNAME \
 # Get Chromium depot tools
 RUN git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git /opt/depot_tools \
  && chown -R $UID:$GID /opt/depot_tools
-ENV PATH /opt/depot_tools:$PATH
+ENV PATH=/opt/depot_tools:$PATH
 
 # Create workdir
 RUN mkdir /webrtc && chown $UID:$GID /webrtc
 
 # Setup CCache
-ENV CCACHE_DIR /webrtc/.ccache \
-    CCACHE_BASEDIR /webrtc/src \
-    CCACHE_SLOPPINESS include_file_mtime
+ENV CCACHE_DIR=/webrtc/.ccache \
+    CCACHE_BASEDIR=/webrtc/src \
+    CCACHE_SLOPPINESS=include_file_mtime
 
 # Run as user
 USER $USERNAME
