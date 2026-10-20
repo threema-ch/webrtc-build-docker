@@ -135,7 +135,7 @@ Finally, add the patch to the repository:
 
     cd ./webrtc/<platform>/src
     git add .
-    git diff --cached > ../../patches/<patch-name>
+    git diff --cached > ../../../patches/<patch-name>
 
 ### Test Patches (Android)
 
