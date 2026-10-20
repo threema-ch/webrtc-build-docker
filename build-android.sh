@@ -15,7 +15,17 @@ revision=$1
 [[ -d ./build/android ]] && rm -rf ./build/android
 mkdir -p ./artifacts/android ./build/android
 
-docker run --rm -ti \
+# Rootless podman maps the host user to root inside the container, so the
+# container user could not write to the mounted volumes without keep-id
+function docker_run {
+    if docker --version 2>/dev/null | grep -qi podman; then
+        docker run --userns=keep-id "$@"
+    else
+        docker run "$@"
+    fi
+}
+
+docker_run --rm -ti \
     -v "$(pwd)/artifacts/android:/artifacts" \
     -v "$(pwd)/build/android:/build" \
     -v "$(pwd)/patches:/patches" \
