@@ -27,6 +27,16 @@ function require_tools_image {
     )
 }
 
+# Rootless podman maps the host user to root inside the container, so the
+# container user could not write to the mounted volumes without keep-id
+function docker_run {
+    if docker --version 2>/dev/null | grep -qi podman; then
+        docker run --userns=keep-id "$@"
+    else
+        docker run "$@"
+    fi
+}
+
 case ${1-} in
     clean)
         echo "Removing artifacts and build files"
@@ -57,7 +67,7 @@ case ${1-} in
         # Fetch sources
         mkdir -p ./webrtc/android
         revision="${2:-main}"
-        docker run --rm -ti -v "$(pwd)/webrtc/android:/webrtc" threema/webrtc-build-tools:latest bash -c "
+        docker_run --rm -ti -v "$(pwd)/webrtc/android:/webrtc" threema/webrtc-build-tools:latest bash -c "
             set -euo pipefail
 
             echo \"Fetching sources\"
@@ -81,7 +91,7 @@ case ${1-} in
         (cd ./webrtc/android/src && git stash push -u)
 
         # Update sources
-        docker run --rm -ti -v "$(pwd)/webrtc/android:/webrtc" threema/webrtc-build-tools:latest bash -c "
+        docker_run --rm -ti -v "$(pwd)/webrtc/android:/webrtc" threema/webrtc-build-tools:latest bash -c "
             set -euo pipefail
 
             echo \"Updating source files and tracking branches\"
@@ -101,7 +111,7 @@ case ${1-} in
         fi
 
         # Sync sources
-        docker run --rm -ti -v "$(pwd)/webrtc/android:/webrtc" threema/webrtc-build-tools:latest bash -c "
+        docker_run --rm -ti -v "$(pwd)/webrtc/android:/webrtc" threema/webrtc-build-tools:latest bash -c "
             set -euo pipefail
 
             echo \"Syncing third party repos and running pre-compile hooks\"
@@ -141,7 +151,7 @@ case ${1-} in
         fi
 
         # Format
-        docker run --rm -ti -v "$(pwd)/webrtc/android:/webrtc" threema/webrtc-build-tools:latest bash -c "
+        docker_run --rm -ti -v "$(pwd)/webrtc/android:/webrtc" threema/webrtc-build-tools:latest bash -c "
             set -euo pipefail
 
             cd ./src
@@ -177,7 +187,7 @@ case ${1-} in
         for target in "${targets[@]}"; do
             echo "Building for ${target}"
 
-            docker run --rm -ti -v "$(pwd)/webrtc/android:/webrtc" threema/webrtc-build-tools:latest bash -ci "
+            docker_run --rm -ti -v "$(pwd)/webrtc/android:/webrtc" threema/webrtc-build-tools:latest bash -ci "
                 set -euo pipefail
 
                 cd ./src
@@ -196,7 +206,7 @@ case ${1-} in
         require_tools_image
 
         # Enter an interactive shell
-        docker run --rm -ti -v "$(pwd)/webrtc/android:/webrtc" -v "$(pwd)/patches:/patches" threema/webrtc-build-tools:latest
+        docker_run --rm -ti -v "$(pwd)/webrtc/android:/webrtc" -v "$(pwd)/patches:/patches" threema/webrtc-build-tools:latest
         ;;
 
     *)
