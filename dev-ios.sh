@@ -25,11 +25,10 @@ function print_usage {
 case ${1-} in
     clean)
         echo "Removing artifacts and build files"
-        [[ -d ./artifacts ]] && rm -r ./artifacts
-        [[ -d ./build ]] && rm -rf ./build
+        rm -rf ./artifacts/ios ./artifacts/ios-dirty ./build/ios
 
         echo "Removing source files"
-        [[ -d ./webrtc ]] && rm -rf ./webrtc
+        rm -rf ./webrtc/ios
         ;;
 
     fetch-tools)
@@ -46,7 +45,7 @@ case ${1-} in
     fetch)
         if [[ -d ./webrtc/ios ]]; then
             echo "Cannot fetch, source directory \"webrtc/ios\" already exists"
-            echo "Run \"$0 clean\" to start from scratch"
+            echo "Run \"rm -rf webrtc/ios\" to start from scratch"
             exit 3;
         fi
 

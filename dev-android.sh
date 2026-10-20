@@ -40,11 +40,10 @@ function docker_run {
 case ${1-} in
     clean)
         echo "Removing artifacts and build files"
-        [[ -d ./artifacts ]] && rm -r ./artifacts
-        [[ -d ./build ]] && rm -rf ./build
+        rm -rf ./artifacts/android ./artifacts/android-dirty ./build/android
 
         echo "Removing source files"
-        [[ -d ./webrtc ]] && rm -rf ./webrtc
+        rm -rf ./webrtc/android
 
         echo "Removing tools image"
         docker rmi --force threema/webrtc-build-tools:latest || true
@@ -60,7 +59,7 @@ case ${1-} in
         require_tools_image
         if [[ -d ./webrtc/android ]]; then
             echo "Cannot fetch, source directory \"webrtc/android\" already exists"
-            echo "Run \"$0 clean\" to start from scratch"
+            echo "Run \"rm -rf webrtc/android\" to start from scratch"
             exit 3;
         fi
 
