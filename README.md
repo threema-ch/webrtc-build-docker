@@ -159,7 +159,8 @@ Now, apply all desired patches at once and make a test build for Android
 
 Apply the resulting library to the Android codebase in the following hacky way:
 
-- Open `build.gradle.kts` and add `mavenLocal()` to `allprojects.repositories`.
+- Open `settings.gradle.kts` and add `mavenLocal()` to
+  `dependencyResolutionManagement.repositories`.
 - Open `gradle/libs.versions.toml` and change the `webrtcAndroid` version to
   your chosen (absurdly high) version.
 
