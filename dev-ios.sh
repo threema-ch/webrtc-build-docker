@@ -82,7 +82,7 @@ case ${1-} in
         echo "Note: This will leave all untracked branches untouched!"
         (cd ./src && git rebase-update)
         gclient sync -D
-        echo "Done. Any patches and uncommited changes to libwebrtc need to be reapplied."
+        echo "Done. Any patches and uncommitted changes to libwebrtc need to be reapplied."
         ;;
 
     sync)
